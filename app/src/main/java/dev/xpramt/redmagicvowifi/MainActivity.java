@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private LinearLayout createContent() {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(Color.BLACK);
         screen.setOnApplyWindowInsetsListener((view, insets) -> {
             int top = insets.getInsets(WindowInsets.Type.statusBars()).top;
             view.setPadding(0, top, 0, 0);
@@ -74,6 +75,7 @@ public class MainActivity extends Activity {
         ));
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.BLACK);
         root.setPadding(dp(20), dp(10), dp(20), dp(28));
         scrollView.addView(root);
 
@@ -105,6 +107,7 @@ public class MainActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(Color.rgb(0, 0, 32));
         bar.setPadding(dp(20), dp(10), dp(8), dp(10));
         bar.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -201,6 +204,7 @@ public class MainActivity extends Activity {
         Switch sw = new Switch(this);
         sw.setText(title);
         sw.setTextSize(18);
+        sw.setTextColor(Color.WHITE);
         sw.setChecked(prefs.getBoolean(key, true));
         sw.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(key, isChecked).commit();
@@ -275,6 +279,7 @@ public class MainActivity extends Activity {
         button.setId(modeToId(mode));
         button.setText(label);
         button.setTextSize(14);
+        button.setTextColor(Color.WHITE);
         button.setGravity(Gravity.CENTER_VERTICAL);
         group.addView(button);
     }
@@ -284,6 +289,7 @@ public class MainActivity extends Activity {
         button.setId(styleToId(style));
         button.setText(label);
         button.setTextSize(14);
+        button.setTextColor(Color.WHITE);
         button.setGravity(Gravity.CENTER_VERTICAL);
         group.addView(button);
     }
@@ -325,6 +331,7 @@ public class MainActivity extends Activity {
         TextView textView = new TextView(this);
         textView.setText(value);
         textView.setTextSize(sp);
+        textView.setTextColor(Color.WHITE);
         textView.setLineSpacing(0, 1.12f);
         if (bold) {
             textView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
