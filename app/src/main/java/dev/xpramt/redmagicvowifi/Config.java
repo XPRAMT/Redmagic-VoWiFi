@@ -20,7 +20,6 @@ final class Config {
 
     static final String MODE_LSPOSED = "lsposed";
     static final String MODE_ROOT_GLOBAL = "root_global";
-    static final String MODE_ADB_SHIZUKU = "adb_shizuku";
 
     private Config() {
     }

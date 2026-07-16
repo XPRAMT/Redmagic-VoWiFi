@@ -50,7 +50,7 @@ public class MainActivity extends Activity {
 
         TextView title = text("RedMagic VoWiFi", 22, true);
         root.addView(title);
-        root.addView(text("支援 ADB/Shizuku 能力邊界說明、Root 全域 resetprop、Root + LSPosed hook 三種使用情境。", 14, false));
+        root.addView(text("支援 Root 全域 resetprop 與 Root + LSPosed hook 兩種模式。", 14, false));
         root.addView(modeSection());
 
         root.addView(sectionSwitch(
@@ -74,11 +74,10 @@ public class MainActivity extends Activity {
     private LinearLayout modeSection() {
         LinearLayout box = sectionBox();
         box.addView(text("操作模式", 18, true));
-        box.addView(text("ADB/Shizuku 沒有 root，不能改 ro.vendor.* 或 hook SystemUI。Root 全域模式直接 resetprop。Root + LSPosed 模式只在目標進程內偽造讀值。", 13, false));
+        box.addView(text("Root 全域模式直接 resetprop。Root + LSPosed 模式不永久改全域屬性，只在 Settings/SystemUI 進程內偽造讀值。", 13, false));
 
         RadioGroup group = new RadioGroup(this);
         group.setOrientation(RadioGroup.VERTICAL);
-        addModeRadio(group, Config.MODE_ADB_SHIZUKU, "ADB/Shizuku 限制模式：只能輔助重啟/Pixel IMS，不能套用三個核心開關");
         addModeRadio(group, Config.MODE_ROOT_GLOBAL, "Root 全域模式：不 hook，直接套用 resetprop 全域參數");
         addModeRadio(group, Config.MODE_LSPOSED, "Root + LSPosed 模式：hook Settings/SystemUI，較少全域副作用");
         String current = prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED);
@@ -133,7 +132,7 @@ public class MainActivity extends Activity {
     private LinearLayout actionSection() {
         LinearLayout box = sectionBox();
         box.addView(text("套用 / 重啟", 18, true));
-        box.addView(text("套用只同步目前開關對應的全域參數，不會重啟進程。Root 按鈕會使用 su；ADB/Shizuku 模式不具備 resetprop/hook 能力。", 13, false));
+        box.addView(text("套用只同步目前開關對應的全域參數，不會重啟進程。Root 按鈕會使用 su。", 13, false));
 
         Button applyGlobal = new Button(this);
         applyGlobal.setText("套用");
@@ -206,13 +205,11 @@ public class MainActivity extends Activity {
 
     private int modeToId(String mode) {
         if (Config.MODE_ROOT_GLOBAL.equals(mode)) return 2002;
-        if (Config.MODE_ADB_SHIZUKU.equals(mode)) return 2003;
         return 2001;
     }
 
     private String idToMode(int id) {
         if (id == 2002) return Config.MODE_ROOT_GLOBAL;
-        if (id == 2003) return Config.MODE_ADB_SHIZUKU;
         return Config.MODE_LSPOSED;
     }
 
