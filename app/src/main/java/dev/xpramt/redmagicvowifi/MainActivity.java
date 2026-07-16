@@ -133,25 +133,16 @@ public class MainActivity extends Activity {
     private LinearLayout actionSection() {
         LinearLayout box = sectionBox();
         box.addView(text("套用 / 重啟", 18, true));
-        box.addView(text("Root 按鈕會使用 su。ADB/Shizuku 模式不具備 resetprop/hook 能力，請用 Pixel IMS 類工具處理 carrier config。", 13, false));
+        box.addView(text("套用只同步目前開關對應的全域參數，不會重啟進程。Root 按鈕會使用 su；ADB/Shizuku 模式不具備 resetprop/hook 能力。", 13, false));
 
         Button applyGlobal = new Button(this);
-        applyGlobal.setText("套用全域參數（Root 全域模式）");
+        applyGlobal.setText("套用");
         applyGlobal.setOnClickListener(view -> runRootCommand(
                 globalApplyCommand(),
-                "已套用全域參數",
-                "套用全域參數失敗"
+                "已套用目前開關值",
+                "套用失敗"
         ));
         box.addView(applyGlobal);
-
-        Button clearGlobal = new Button(this);
-        clearGlobal.setText("清除全域參數（Root 全域模式）");
-        clearGlobal.setOnClickListener(view -> runRootCommand(
-                globalClearCommand(),
-                "已清除全域參數",
-                "清除全域參數失敗"
-        ));
-        box.addView(clearGlobal);
 
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
@@ -180,14 +171,6 @@ public class MainActivity extends Activity {
         ));
         box.addView(restartBoth);
 
-        Button fixPrefs = new Button(this);
-        fixPrefs.setText("修正模組設定讀取權限");
-        fixPrefs.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand(),
-                "已修正 shared_prefs 權限",
-                "修正權限失敗"
-        ));
-        box.addView(fixPrefs);
         return box;
     }
 
@@ -289,27 +272,24 @@ public class MainActivity extends Activity {
 
     private String globalApplyCommand() {
         StringBuilder command = new StringBuilder();
-        if (prefs.getBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true)) {
-            command.append(resetpropSet("ro.vendor.feature.zte_feature_need_wfc_for_domestic", "true")).append("; ");
-        }
+        command.append(resetpropSet(
+                "ro.vendor.feature.zte_feature_need_wfc_for_domestic",
+                prefs.getBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true) ? "true" : "false"
+        )).append("; ");
         if (prefs.getBoolean(Config.KEY_ENABLE_STATUS_ICON, true)) {
             command.append(resetpropSet("ro.vendor.mifavor.custom", "abroad")).append("; ");
             command.append(resetpropSet("ro.mifavor.custom", "abroad")).append("; ");
+        } else {
+            command.append(resetpropSet("ro.vendor.mifavor.custom", "home")).append("; ");
+            command.append(resetpropSet("ro.mifavor.custom", "home")).append("; ");
         }
         String style = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
         if (Config.STYLE_GEN_BD.equals(style) || Config.STYLE_ARRAY_HOOK.equals(style)) {
             command.append(resetpropSet("persist.custom.variant.id", "GEN_BD")).append("; ");
+        } else {
+            command.append(resetpropDelete("persist.custom.variant.id")).append("; ");
         }
-        command.append("am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)");
         return command.toString();
-    }
-
-    private String globalClearCommand() {
-        return resetpropSet("ro.vendor.feature.zte_feature_need_wfc_for_domestic", "false")
-                + "; " + resetpropSet("ro.vendor.mifavor.custom", "home")
-                + "; " + resetpropSet("ro.mifavor.custom", "home")
-                + "; " + resetpropDelete("persist.custom.variant.id")
-                + "; am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)";
     }
 
     private void runRootCommandQuietly(String command) {

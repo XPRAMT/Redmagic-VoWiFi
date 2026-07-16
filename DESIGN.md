@@ -185,6 +185,8 @@ The same permission fix is prepended to the in-app restart buttons.
 
 ## Global Mode Commands
 
+`套用` must synchronize the complete desired state. Switches mean true/false target values, not whether a command should be emitted.
+
 Apply:
 
 ```sh
@@ -192,17 +194,20 @@ Apply:
 /data/adb/ksu/bin/resetprop -n ro.vendor.mifavor.custom abroad
 /data/adb/ksu/bin/resetprop -n ro.mifavor.custom abroad
 /data/adb/ksu/bin/resetprop -n persist.custom.variant.id GEN_BD
-am force-stop com.android.settings
-kill -9 $(pidof com.android.systemui)
 ```
 
-Clear:
+Apply off/default state:
 
 ```sh
 /data/adb/ksu/bin/resetprop -n ro.vendor.feature.zte_feature_need_wfc_for_domestic false
 /data/adb/ksu/bin/resetprop -n ro.vendor.mifavor.custom home
 /data/adb/ksu/bin/resetprop -n ro.mifavor.custom home
 /data/adb/ksu/bin/resetprop -d persist.custom.variant.id
+```
+
+Restart actions are separate buttons:
+
+```sh
 am force-stop com.android.settings
 kill -9 $(pidof com.android.systemui)
 ```

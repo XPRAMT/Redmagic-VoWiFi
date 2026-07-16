@@ -70,7 +70,8 @@ Not supported in this mode:
 ## Mode 2: Root Global Mode
 
 Use this mode when you do not want LSPosed hooks.
-The app's `套用全域參數（Root 全域模式）` button runs `resetprop` through root.
+The app's `套用` button runs `resetprop` through root and synchronizes the current switch state.
+It does not restart Settings/SystemUI. Use the restart buttons after applying.
 
 Switch mapping:
 
@@ -97,7 +98,8 @@ am force-stop com.android.settings
 kill -9 $(pidof com.android.systemui)
 ```
 
-Clear global mode changes:
+To disable features, turn off the switches and press `套用`.
+This writes the off values:
 
 ```sh
 su
@@ -105,6 +107,12 @@ su
 /data/adb/ksu/bin/resetprop -n ro.vendor.mifavor.custom home
 /data/adb/ksu/bin/resetprop -n ro.mifavor.custom home
 /data/adb/ksu/bin/resetprop -d persist.custom.variant.id
+```
+
+Restart separately:
+
+```sh
+su
 am force-stop com.android.settings
 kill -9 $(pidof com.android.systemui)
 ```
@@ -145,13 +153,8 @@ After changing switches, press:
 重啟 Settings + SystemUI
 ```
 
-The app also includes:
-
-```text
-修正模組設定讀取權限
-```
-
-This fixes the module preference XML permissions for `XSharedPreferences`.
+The app automatically fixes module preference XML permissions when saving switches and before restart actions.
+This is needed because LSPosed hook processes read switches through `XSharedPreferences`.
 If preferences cannot be read, hooks fail closed:
 
 - WFC Settings hook: off
