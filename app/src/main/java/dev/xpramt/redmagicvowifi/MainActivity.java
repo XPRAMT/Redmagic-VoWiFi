@@ -5,9 +5,15 @@ import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.method.LinkMovementMethod;
+import android.text.style.URLSpan;
 import android.view.Gravity;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
@@ -53,6 +59,11 @@ public class MainActivity extends Activity {
     private LinearLayout createContent() {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setOnApplyWindowInsetsListener((view, insets) -> {
+            int top = insets.getInsets(WindowInsets.Type.statusBars()).top;
+            view.setPadding(0, top, 0, 0);
+            return insets;
+        });
         screen.addView(appBar());
 
         ScrollView scrollView = new ScrollView(this);
@@ -108,9 +119,10 @@ public class MainActivity extends Activity {
         ));
         bar.addView(title);
 
-        Button menu = new Button(this);
+        TextView menu = text("⋮", 24, false);
+        menu.setGravity(Gravity.CENTER);
+        menu.setBackgroundColor(Color.TRANSPARENT);
         menu.setText("⋮");
-        menu.setTextSize(24);
         menu.setMinWidth(dp(48));
         menu.setMinHeight(dp(48));
         menu.setOnClickListener(view -> showOverflowMenu(menu));
@@ -118,7 +130,7 @@ public class MainActivity extends Activity {
         return bar;
     }
 
-    private void showOverflowMenu(Button anchor) {
+    private void showOverflowMenu(TextView anchor) {
         PopupMenu popup = new PopupMenu(this, anchor);
         popup.getMenu().add("關於");
         popup.setOnMenuItemClickListener(item -> {
@@ -129,9 +141,21 @@ public class MainActivity extends Activity {
     }
 
     private void showAboutDialog() {
+        String message = "作者：XPRAMT\nGitHub：https://github.com/XPRAMT/Redmagic-VoWiFi\n版本：" + versionName();
+        SpannableString spannable = new SpannableString(message);
+        String url = "https://github.com/XPRAMT/Redmagic-VoWiFi";
+        int start = message.indexOf(url);
+        if (start >= 0) {
+            spannable.setSpan(new URLSpan(url), start, start + url.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        TextView content = text("", 14, false);
+        content.setText(spannable);
+        content.setMovementMethod(LinkMovementMethod.getInstance());
+        content.setPadding(dp(24), dp(8), dp(24), 0);
+
         new AlertDialog.Builder(this)
                 .setTitle("關於")
-                .setMessage("作者：XPRAMT\nGitHub：https://github.com/XPRAMT/Redmagic-VoWiFi\n版本：" + versionName())
+                .setView(content)
                 .setPositiveButton("確定", null)
                 .show();
     }
