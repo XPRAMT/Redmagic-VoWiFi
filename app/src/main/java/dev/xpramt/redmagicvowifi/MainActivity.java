@@ -12,8 +12,10 @@ import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
 import android.text.style.URLSpan;
 import android.view.Gravity;
+import android.view.Window;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
@@ -42,6 +44,8 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(APP_BAR_COLOR);
+        getWindow().setNavigationBarColor(Color.BLACK);
+        setSystemBarIconColors(getWindow());
         prefs = Config.appPrefs(this);
         ensureDefaults();
         setContentView(createContent());
@@ -63,11 +67,6 @@ public class MainActivity extends Activity {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
         screen.setBackgroundColor(Color.BLACK);
-        screen.setOnApplyWindowInsetsListener((view, insets) -> {
-            int top = insets.getInsets(WindowInsets.Type.statusBars()).top;
-            view.setPadding(0, top, 0, 0);
-            return insets;
-        });
         screen.addView(appBar());
 
         ScrollView scrollView = new ScrollView(this);
@@ -112,6 +111,11 @@ public class MainActivity extends Activity {
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setBackgroundColor(APP_BAR_COLOR);
         bar.setPadding(dp(20), dp(10), dp(8), dp(10));
+        bar.setOnApplyWindowInsetsListener((view, insets) -> {
+            int top = insets.getInsets(WindowInsets.Type.statusBars()).top;
+            view.setPadding(dp(20), top + dp(10), dp(8), dp(10));
+            return insets;
+        });
         bar.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -134,6 +138,14 @@ public class MainActivity extends Activity {
         menu.setOnClickListener(view -> showOverflowMenu(menu));
         bar.addView(menu);
         return bar;
+    }
+
+    private void setSystemBarIconColors(Window window) {
+        WindowInsetsController controller = window.getInsetsController();
+        if (controller != null) {
+            controller.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+            controller.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        }
     }
 
     private void showOverflowMenu(TextView anchor) {
