@@ -16,7 +16,7 @@ Pixel IMS or equivalent carrier-config changes are still required for carrier WF
 | `開啟 VoWiFi 設定` | Partial only. Pixel IMS/Shizuku can set carrier WFC config, but cannot bypass ZTE Settings domestic gate. | Supported. Writes `ro.vendor.feature.zte_feature_need_wfc_for_domestic=true/false` with `resetprop`. | Supported. Hooks `com.android.settings` so reads of `ro.vendor.feature.zte_feature_need_wfc_for_domestic` follow the switch. |
 | `開啟狀態列 VoWiFi 圖標` | Not supported. Shizuku cannot change `ro.vendor.mifavor.custom` or hook SystemUI. | Supported. Writes `ro.vendor.mifavor.custom=abroad/home` and `ro.mifavor.custom=abroad/home` with `resetprop`. | Supported. Hooks `com.android.systemui` so SystemUI behaves as `abroad` when enabled. |
 | `VoWiFi 圖標樣式 = GEN_BD` | Not supported. Shizuku cannot change `persist.custom.variant.id` or hook SystemUI icon arrays. | Supported. Writes or deletes `persist.custom.variant.id=GEN_BD` with `resetprop`. Restart SystemUI after changing this style. | Supported. Hooks `com.android.systemui` so it reads `persist.custom.variant.id=GEN_BD`. Restart SystemUI after changing this style. |
-| `VoWiFi 圖標樣式 = Hook array` | Not supported. | Not supported. Root global mode does not hook SystemUI, and this option intentionally avoids writing `persist.custom.variant.id=GEN_BD`. | Supported. Hooks `com.android.systemui` and tries to replace the IMS icon array result with the BD array. |
+| `VoWiFi 圖標樣式 = Hook array` | Not supported. | Not supported. Root global mode does not hook SystemUI, and this option intentionally avoids writing `persist.custom.variant.id=GEN_BD`. | Supported. Hooks `com.android.systemui` and replaces the IMS icon array result with the BD array. Tested working with dual SIM on the current ROM, but depends on the current ROM method name. |
 
 No-root users can usually enable carrier WFC capability with Pixel IMS/Shizuku, but this ROM still hides Settings and SystemUI behavior behind ZTE project properties. The three switches in this app require root property changes or LSPosed hooks.
 
@@ -49,7 +49,7 @@ Then tap install on the phone.
 Use this mode when you do not want LSPosed hooks.
 Changing a switch immediately runs `resetprop` through root and synchronizes the current switch state.
 It does not restart Settings/SystemUI. Use the restart buttons after changing values.
-The app also shows the current system property values in `目前實際值` and updates them automatically after switch changes.
+The app also shows root global property values in `Root 全域實際值` and updates them automatically after switch changes.
 
 Switch mapping:
 
@@ -109,7 +109,10 @@ Switch mapping:
 - `VoWiFi 圖標樣式 = Hook array`
   - Hook target: `com.android.systemui`
   - Keeps global properties unchanged.
-  - Tries to replace `ImsUpdateFeature#getSingleCardImsIconArrayResId()` with `bd_single_card_volte_vowifi_icons_array`.
+  - Replaces `ImsUpdateFeature#getSingleCardImsIconArrayResId()` with `bd_single_card_volte_vowifi_icons_array`.
+  - Tested working with dual SIM on the current ROM, but depends on the current ROM method name.
+
+`Root 全域實際值` is only meaningful in Root global mode. LSPosed mode does not modify global properties, so `getprop` values do not indicate whether hooks are active.
 
 After changing switches, press:
 

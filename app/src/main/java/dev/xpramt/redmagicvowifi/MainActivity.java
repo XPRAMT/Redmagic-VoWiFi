@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout actualValuesSection() {
         LinearLayout box = sectionBox();
-        box.addView(text("目前實際值", 18, true));
+        box.addView(text("Root 全域實際值", 18, true));
         actualValuesView = text("讀取中...", 13, false);
         box.addView(actualValuesView);
         return box;
@@ -129,7 +129,7 @@ public class MainActivity extends Activity {
         group.setOrientation(RadioGroup.VERTICAL);
         addRadio(group, Config.STYLE_DEFAULT, "預設：不改 persist.custom.variant.id，通常使用 vowifi / vowifi_card1/2/12");
         addRadio(group, Config.STYLE_GEN_BD, "GEN_BD：等效 persist.custom.variant.id=GEN_BD，使用 bd_stat_vowifi / bd_vowifi_card1/2/12");
-        addRadio(group, Config.STYLE_ARRAY_HOOK, "Hook array：僅 Root + LSPosed 模式生效，直接嘗試把 ImsUpdateFeature 指到 BD array");
+        addRadio(group, Config.STYLE_ARRAY_HOOK, "Hook array：僅 Root + LSPosed 模式生效，替換 ImsUpdateFeature 的 IMS icon array；已實測雙卡可用，依賴目前 ROM 方法名");
 
         String current = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
         int checkedId = styleToId(current);
@@ -350,6 +350,10 @@ public class MainActivity extends Activity {
 
     private void refreshActualValues() {
         if (actualValuesView == null) {
+            return;
+        }
+        if (!Config.MODE_ROOT_GLOBAL.equals(prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED))) {
+            actualValuesView.setText("LSPosed 模式不修改全域屬性，這些 getprop 實際值不代表 hook 是否生效。請以 Settings/SystemUI 行為或 LSPosed log 判斷。");
             return;
         }
         actualValuesView.setText(
