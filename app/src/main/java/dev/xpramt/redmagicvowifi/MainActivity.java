@@ -17,6 +17,8 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
@@ -108,7 +110,7 @@ public class MainActivity extends Activity {
     private LinearLayout styleSection() {
         LinearLayout box = sectionBox();
         box.addView(text("VoWiFi 圖標樣式", 18, true));
-        box.addView(text("作用進程：com.android.systemui\n用途：控制 SystemUI 選用哪一套 VoWiFi/VoLTE icon array。", 13, false));
+        box.addView(text("作用進程：com.android.systemui\n等效參數：persist.custom.variant.id=GEN_BD\n用途：控制 SystemUI 選用哪一套 VoWiFi/VoLTE icon array。圖標樣式切換後通常需要重啟手機，單獨重啟 SystemUI 不一定會完整重新載入資源。", 13, false));
 
         RadioGroup group = new RadioGroup(this);
         group.setOrientation(RadioGroup.VERTICAL);
@@ -136,8 +138,8 @@ public class MainActivity extends Activity {
 
         Button applyGlobal = new Button(this);
         applyGlobal.setText("套用");
-        applyGlobal.setOnClickListener(view -> runRootCommand(
-                globalApplyCommand(),
+        applyGlobal.setOnClickListener(view -> runRootCommands(
+                globalApplyCommands(),
                 "已套用目前開關值",
                 "套用失敗"
         ));
@@ -267,26 +269,26 @@ public class MainActivity extends Activity {
                 + key + "; else resetprop -d " + key + "; fi";
     }
 
-    private String globalApplyCommand() {
-        StringBuilder command = new StringBuilder();
-        command.append(resetpropSet(
+    private List<String> globalApplyCommands() {
+        List<String> commands = new ArrayList<>();
+        commands.add(resetpropSet(
                 "ro.vendor.feature.zte_feature_need_wfc_for_domestic",
                 prefs.getBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true) ? "true" : "false"
-        )).append("; ");
+        ));
         if (prefs.getBoolean(Config.KEY_ENABLE_STATUS_ICON, true)) {
-            command.append(resetpropSet("ro.vendor.mifavor.custom", "abroad")).append("; ");
-            command.append(resetpropSet("ro.mifavor.custom", "abroad")).append("; ");
+            commands.add(resetpropSet("ro.vendor.mifavor.custom", "abroad"));
+            commands.add(resetpropSet("ro.mifavor.custom", "abroad"));
         } else {
-            command.append(resetpropSet("ro.vendor.mifavor.custom", "home")).append("; ");
-            command.append(resetpropSet("ro.mifavor.custom", "home")).append("; ");
+            commands.add(resetpropSet("ro.vendor.mifavor.custom", "home"));
+            commands.add(resetpropSet("ro.mifavor.custom", "home"));
         }
         String style = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
         if (Config.STYLE_GEN_BD.equals(style) || Config.STYLE_ARRAY_HOOK.equals(style)) {
-            command.append(resetpropSet("persist.custom.variant.id", "GEN_BD")).append("; ");
+            commands.add(resetpropSet("persist.custom.variant.id", "GEN_BD"));
         } else {
-            command.append(resetpropDelete("persist.custom.variant.id")).append("; ");
+            commands.add(resetpropDelete("persist.custom.variant.id"));
         }
-        return command.toString();
+        return commands;
     }
 
     private void runRootCommandQuietly(String command) {
@@ -304,6 +306,25 @@ public class MainActivity extends Activity {
             Process process = new ProcessBuilder("su", "-c", command).redirectErrorStream(true).start();
             int exitCode = process.waitFor();
             Toast.makeText(this, exitCode == 0 ? successMessage : errorMessage + " (" + exitCode + ")", Toast.LENGTH_LONG).show();
+        } catch (IOException exception) {
+            Toast.makeText(this, errorMessage + "：無法取得 root", Toast.LENGTH_LONG).show();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            Toast.makeText(this, errorMessage + "：執行中斷", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void runRootCommands(List<String> commands, String successMessage, String errorMessage) {
+        try {
+            for (String command : commands) {
+                Process process = new ProcessBuilder("su", "-c", command).redirectErrorStream(true).start();
+                int exitCode = process.waitFor();
+                if (exitCode != 0) {
+                    Toast.makeText(this, errorMessage + " (" + exitCode + ")：" + command, Toast.LENGTH_LONG).show();
+                    return;
+                }
+            }
+            Toast.makeText(this, successMessage, Toast.LENGTH_LONG).show();
         } catch (IOException exception) {
             Toast.makeText(this, errorMessage + "：無法取得 root", Toast.LENGTH_LONG).show();
         } catch (InterruptedException exception) {

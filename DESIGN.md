@@ -185,6 +185,8 @@ The same permission fix is prepended to the in-app restart buttons.
 ## Global Mode Commands
 
 `套用` must synchronize the complete desired state. Switches mean true/false target values, not whether a command should be emitted.
+On the tested KernelSU environment, multiple `/data/adb/ksu/bin/resetprop` calls in one `su -c` command can fail after the first call with `inaccessible or not found`.
+Run each resetprop operation as a separate `su -c` process.
 
 Apply:
 
