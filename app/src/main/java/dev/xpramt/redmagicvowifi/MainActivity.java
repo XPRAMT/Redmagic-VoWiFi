@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
         ensureDefaults();
         setContentView(createContent());
         makePrefsReadable();
+        runRootCommandQuietly(hookConfigWriteCommand());
     }
 
     private void ensureDefaults() {
@@ -152,7 +153,7 @@ public class MainActivity extends Activity {
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
         restartSettings.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand() + "; am force-stop com.android.settings",
+                hookConfigWriteCommand() + "; " + prefsPermissionCommand() + "; am force-stop com.android.settings",
                 "已執行：am force-stop com.android.settings",
                 "重啟 Settings 失敗"
         ));
@@ -161,7 +162,7 @@ public class MainActivity extends Activity {
         Button restartSystemUi = new Button(this);
         restartSystemUi.setText("重啟 SystemUI");
         restartSystemUi.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand() + "; kill -9 $(pidof com.android.systemui)",
+                hookConfigWriteCommand() + "; " + prefsPermissionCommand() + "; kill -9 $(pidof com.android.systemui)",
                 "已執行：kill -9 $(pidof com.android.systemui)",
                 "重啟 SystemUI 失敗"
         ));
@@ -170,7 +171,7 @@ public class MainActivity extends Activity {
         Button restartBoth = new Button(this);
         restartBoth.setText("重啟 Settings + SystemUI");
         restartBoth.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand() + "; am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)",
+                hookConfigWriteCommand() + "; " + prefsPermissionCommand() + "; am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)",
                 "已重啟 Settings + SystemUI",
                 "重啟失敗"
         ));
@@ -276,11 +277,38 @@ public class MainActivity extends Activity {
     private void applyCurrentState(String successMessage, String errorMessage) {
         makePrefsReadable();
         if (Config.MODE_ROOT_GLOBAL.equals(prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED))) {
-            runRootCommands(globalApplyCommands(), successMessage, errorMessage);
+            List<String> commands = new ArrayList<>();
+            commands.add(hookConfigWriteCommand());
+            commands.addAll(globalApplyCommands());
+            runRootCommands(commands, successMessage, errorMessage);
         } else {
-            refreshActualValues();
-            Toast.makeText(this, "已保存 LSPosed hook 設定", Toast.LENGTH_LONG).show();
+            runRootCommands(singleCommand(hookConfigWriteCommand()), "已保存 LSPosed hook 設定", errorMessage);
         }
+    }
+
+    private List<String> singleCommand(String command) {
+        List<String> commands = new ArrayList<>();
+        commands.add(command);
+        return commands;
+    }
+
+    private String hookConfigWriteCommand() {
+        String mode = prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED);
+        String iconStyle = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
+        boolean wfc = prefs.getBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true);
+        boolean icon = prefs.getBoolean(Config.KEY_ENABLE_STATUS_ICON, true);
+        String content = Config.KEY_OPERATION_MODE + "=" + mode + "\n"
+                + Config.KEY_ENABLE_WFC_SETTINGS + "=" + wfc + "\n"
+                + Config.KEY_ENABLE_STATUS_ICON + "=" + icon + "\n"
+                + Config.KEY_ICON_STYLE + "=" + iconStyle + "\n";
+        return "mkdir -p /data/adb/redmagic-vowifi; "
+                + "printf " + shellQuote(content) + " > " + Config.HOOK_CONFIG_PATH + "; "
+                + "chmod 755 /data/adb/redmagic-vowifi; "
+                + "chmod 644 " + Config.HOOK_CONFIG_PATH;
+    }
+
+    private String shellQuote(String value) {
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 
     private List<String> globalApplyCommands() {

@@ -3,11 +3,15 @@ package dev.xpramt.redmagicvowifi;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import de.robv.android.xposed.XSharedPreferences;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Properties;
 
 final class Config {
     static final String PACKAGE_NAME = "dev.xpramt.redmagicvowifi";
     static final String PREFS_NAME = "module";
+    static final String HOOK_CONFIG_PATH = "/data/adb/redmagic-vowifi/config.properties";
 
     static final String KEY_ENABLE_WFC_SETTINGS = "enable_wfc_settings";
     static final String KEY_ENABLE_STATUS_ICON = "enable_status_icon";
@@ -29,14 +33,17 @@ final class Config {
     }
 
     static Snapshot loadForHook() {
-        XSharedPreferences prefs = new XSharedPreferences(PACKAGE_NAME, PREFS_NAME);
-        prefs.makeWorldReadable();
-        prefs.reload();
+        Properties prefs = new Properties();
+        File file = new File(HOOK_CONFIG_PATH);
+        try (FileInputStream input = new FileInputStream(file)) {
+            prefs.load(input);
+        } catch (IOException ignored) {
+        }
         return new Snapshot(
-                prefs.getString(KEY_OPERATION_MODE, MODE_LSPOSED),
-                prefs.getBoolean(KEY_ENABLE_WFC_SETTINGS, false),
-                prefs.getBoolean(KEY_ENABLE_STATUS_ICON, false),
-                prefs.getString(KEY_ICON_STYLE, STYLE_DEFAULT)
+                prefs.getProperty(KEY_OPERATION_MODE, MODE_LSPOSED),
+                Boolean.parseBoolean(prefs.getProperty(KEY_ENABLE_WFC_SETTINGS, "false")),
+                Boolean.parseBoolean(prefs.getProperty(KEY_ENABLE_STATUS_ICON, "false")),
+                prefs.getProperty(KEY_ICON_STYLE, STYLE_DEFAULT)
         );
     }
 
