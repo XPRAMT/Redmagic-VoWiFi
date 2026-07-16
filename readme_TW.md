@@ -10,6 +10,8 @@
 - `Root + LSPosed 模式`：只 hook `com.android.settings` 與 `com.android.systemui`，避免持久修改全域屬性。
 
 仍需要 Pixel IMS 或等效 carrier-config 修改，讓電信商 WFC/VoWiFi 能力本身啟用。
+請先安裝 [Pixel IMS](https://github.com/kyujin-cho/pixel-volte-patch)，並用它開啟 VoWiFi。
+本 App 主要處理中國版 ROM 的 VoWiFi UI 問題：設定頁缺少 VoWiFi 開關，以及狀態列 VoWiFi 圖標顯示問題。
 
 ## 能力邊界
 
@@ -26,12 +28,13 @@
 
 安裝後：
 
-1. 在 LSPosed 內啟用本模組。
-2. 勾選作用域：
+1. 安裝 [Pixel IMS](https://github.com/kyujin-cho/pixel-volte-patch)，並開啟 VoWiFi。
+2. 在 LSPosed 內啟用本模組。
+3. 勾選作用域：
    - `com.android.settings`
    - `com.android.systemui`
-3. 打開 App 選擇需要的模式與開關。
-4. 按 `重啟 Settings + SystemUI` 讓目標進程重新讀取設定。
+4. 打開 App 選擇需要的模式與開關。
+5. 按 `重啟 Settings + SystemUI` 讓目標進程重新讀取設定。
 
 ## 編譯
 

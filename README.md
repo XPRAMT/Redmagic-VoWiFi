@@ -10,6 +10,8 @@ This app supports two modes only:
 - `Root + LSPosed Mode`: hooks only `com.android.settings` and `com.android.systemui` to avoid persistent global property changes.
 
 Pixel IMS or equivalent carrier-config changes are still required to enable carrier WFC/VoWiFi capability.
+Install [Pixel IMS](https://github.com/kyujin-cho/pixel-volte-patch) first and use it to enable VoWiFi.
+This app mainly fixes the VoWiFi UI problems on the China ROM: the missing Settings toggle and the missing/status-bar icon behavior.
 
 ## Capability Boundary
 
@@ -26,12 +28,13 @@ Download the APK and install it directly on the phone.
 
 After installing:
 
-1. Enable this module in LSPosed.
-2. Select the scopes:
+1. Install [Pixel IMS](https://github.com/kyujin-cho/pixel-volte-patch) and enable VoWiFi.
+2. Enable this module in LSPosed.
+3. Select the scopes:
    - `com.android.settings`
    - `com.android.systemui`
-3. Open the app and choose the required mode and switches.
-4. Press `Restart Settings + SystemUI` so the target processes reload the settings.
+4. Open the app and choose the required mode and switches.
+5. Press `Restart Settings + SystemUI` so the target processes reload the settings.
 
 ## Build
 
