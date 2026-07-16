@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
                     .putBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true)
                     .putBoolean(Config.KEY_ENABLE_STATUS_ICON, true)
                     .putString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD)
+                    .putString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED)
                     .commit();
         }
     }
@@ -50,6 +51,7 @@ public class MainActivity extends Activity {
         TextView title = text("RedMagic VoWiFi", 22, true);
         root.addView(title);
         root.addView(text("修改只在 LSPosed 目標進程內生效，不直接永久寫入全域屬性。", 14, false));
+        root.addView(modeSection());
 
         root.addView(sectionSwitch(
                 "開啟 VoWiFi 設定",
@@ -67,6 +69,25 @@ public class MainActivity extends Activity {
 
         root.addView(actionSection());
         return scrollView;
+    }
+
+    private LinearLayout modeSection() {
+        LinearLayout box = sectionBox();
+        box.addView(text("操作模式", 18, true));
+        box.addView(text("ADB/root 全域模式：不使用 hook，直接把參數寫到系統屬性。Root + LSPosed 模式：不永久改全域屬性，只在 Settings/SystemUI 進程內偽造讀值。", 13, false));
+
+        RadioGroup group = new RadioGroup(this);
+        group.setOrientation(RadioGroup.VERTICAL);
+        addModeRadio(group, Config.MODE_LSPOSED, "Root + LSPosed 模式：hook Settings/SystemUI，較少全域副作用");
+        addModeRadio(group, Config.MODE_GLOBAL, "ADB/root 全域模式：不 hook，直接套用 resetprop 全域參數");
+        String current = prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED);
+        group.check(modeToId(current));
+        group.setOnCheckedChangeListener((radioGroup, checked) -> {
+            prefs.edit().putString(Config.KEY_OPERATION_MODE, idToMode(checked)).commit();
+            makePrefsReadable();
+        });
+        box.addView(group);
+        return box;
     }
 
     private LinearLayout sectionSwitch(String title, String description, String key) {
@@ -113,6 +134,24 @@ public class MainActivity extends Activity {
         box.addView(text("套用 / 重啟", 18, true));
         box.addView(text("改完開關後，需要重啟對應進程才會重新載入 LSPosed hook。以下按鈕會使用 root 執行命令。", 13, false));
 
+        Button applyGlobal = new Button(this);
+        applyGlobal.setText("套用全域參數（ADB/root 模式）");
+        applyGlobal.setOnClickListener(view -> runRootCommand(
+                globalApplyCommand(),
+                "已套用全域參數",
+                "套用全域參數失敗"
+        ));
+        box.addView(applyGlobal);
+
+        Button clearGlobal = new Button(this);
+        clearGlobal.setText("清除全域參數（ADB/root 模式）");
+        clearGlobal.setOnClickListener(view -> runRootCommand(
+                globalClearCommand(),
+                "已清除全域參數",
+                "清除全域參數失敗"
+        ));
+        box.addView(clearGlobal);
+
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
         restartSettings.setOnClickListener(view -> runRootCommand(
@@ -151,6 +190,15 @@ public class MainActivity extends Activity {
         return box;
     }
 
+    private void addModeRadio(RadioGroup group, String mode, String label) {
+        RadioButton button = new RadioButton(this);
+        button.setId(modeToId(mode));
+        button.setText(label);
+        button.setTextSize(14);
+        button.setGravity(Gravity.CENTER_VERTICAL);
+        group.addView(button);
+    }
+
     private void addRadio(RadioGroup group, String style, String label) {
         RadioButton button = new RadioButton(this);
         button.setId(styleToId(style));
@@ -170,6 +218,16 @@ public class MainActivity extends Activity {
         if (id == 1002) return Config.STYLE_GEN_BD;
         if (id == 1003) return Config.STYLE_ARRAY_HOOK;
         return Config.STYLE_DEFAULT;
+    }
+
+    private int modeToId(String mode) {
+        if (Config.MODE_GLOBAL.equals(mode)) return 2002;
+        return 2001;
+    }
+
+    private String idToMode(int id) {
+        if (id == 2002) return Config.MODE_GLOBAL;
+        return Config.MODE_LSPOSED;
     }
 
     private LinearLayout sectionBox() {
@@ -214,6 +272,41 @@ public class MainActivity extends Activity {
                 + "/data/data/" + pkg + " /data/data/" + pkg + "/shared_prefs 2>/dev/null; "
                 + "chmod 644 /data/user/0/" + pkg + "/shared_prefs/" + file + " "
                 + "/data/data/" + pkg + "/shared_prefs/" + file + " 2>/dev/null";
+    }
+
+    private String resetpropSet(String key, String value) {
+        return "if [ -x /data/adb/ksu/bin/resetprop ]; then /data/adb/ksu/bin/resetprop -n "
+                + key + " " + value + "; else resetprop -n " + key + " " + value + "; fi";
+    }
+
+    private String resetpropDelete(String key) {
+        return "if [ -x /data/adb/ksu/bin/resetprop ]; then /data/adb/ksu/bin/resetprop -d "
+                + key + "; else resetprop -d " + key + "; fi";
+    }
+
+    private String globalApplyCommand() {
+        StringBuilder command = new StringBuilder();
+        if (prefs.getBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true)) {
+            command.append(resetpropSet("ro.vendor.feature.zte_feature_need_wfc_for_domestic", "true")).append("; ");
+        }
+        if (prefs.getBoolean(Config.KEY_ENABLE_STATUS_ICON, true)) {
+            command.append(resetpropSet("ro.vendor.mifavor.custom", "abroad")).append("; ");
+            command.append(resetpropSet("ro.mifavor.custom", "abroad")).append("; ");
+        }
+        String style = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
+        if (Config.STYLE_GEN_BD.equals(style) || Config.STYLE_ARRAY_HOOK.equals(style)) {
+            command.append(resetpropSet("persist.custom.variant.id", "GEN_BD")).append("; ");
+        }
+        command.append("am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)");
+        return command.toString();
+    }
+
+    private String globalClearCommand() {
+        return resetpropSet("ro.vendor.feature.zte_feature_need_wfc_for_domestic", "false")
+                + "; " + resetpropSet("ro.vendor.mifavor.custom", "home")
+                + "; " + resetpropSet("ro.mifavor.custom", "home")
+                + "; " + resetpropDelete("persist.custom.variant.id")
+                + "; am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)";
     }
 
     private void runRootCommandQuietly(String command) {

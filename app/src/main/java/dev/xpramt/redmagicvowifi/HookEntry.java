@@ -19,6 +19,9 @@ public class HookEntry implements IXposedHookLoadPackage {
             return;
         }
         Config.Snapshot config = Config.loadForHook();
+        if (!Config.MODE_LSPOSED.equals(config.operationMode)) {
+            return;
+        }
         if (SETTINGS.equals(lpparam.packageName) && config.enableWfcSettings) {
             hookSettingsWfcGate(lpparam);
         }

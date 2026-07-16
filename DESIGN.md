@@ -8,6 +8,13 @@ Provide three independent LSPosed toggles for NX809J China ROM VoWiFi behavior:
 2. Show the status-bar VoWiFi icon by entering SystemUI's abroad IMS icon branch.
 3. Match the international ROM's BD-style VoWiFi icon resources.
 
+The app has two operation modes:
+
+- `ADB/root 全域模式`: no hook behavior. The app uses root `resetprop` to write global properties and restarts Settings/SystemUI.
+- `Root + LSPosed 模式`: hook behavior is active. Properties are faked inside target processes only.
+
+`HookEntry` must return immediately unless `operation_mode=lsposed`.
+
 ## Toggle 1: Enable VoWiFi
 
 UI label: `開啟 VoWiFi 設定`
@@ -174,3 +181,27 @@ chmod 644 /data/user/0/dev.xpramt.redmagicvowifi/shared_prefs/module.xml
 ```
 
 The same permission fix is prepended to the in-app restart buttons.
+
+## Global Mode Commands
+
+Apply:
+
+```sh
+/data/adb/ksu/bin/resetprop -n ro.vendor.feature.zte_feature_need_wfc_for_domestic true
+/data/adb/ksu/bin/resetprop -n ro.vendor.mifavor.custom abroad
+/data/adb/ksu/bin/resetprop -n ro.mifavor.custom abroad
+/data/adb/ksu/bin/resetprop -n persist.custom.variant.id GEN_BD
+am force-stop com.android.settings
+kill -9 $(pidof com.android.systemui)
+```
+
+Clear:
+
+```sh
+/data/adb/ksu/bin/resetprop -n ro.vendor.feature.zte_feature_need_wfc_for_domestic false
+/data/adb/ksu/bin/resetprop -n ro.vendor.mifavor.custom home
+/data/adb/ksu/bin/resetprop -n ro.mifavor.custom home
+/data/adb/ksu/bin/resetprop -d persist.custom.variant.id
+am force-stop com.android.settings
+kill -9 $(pidof com.android.systemui)
+```
