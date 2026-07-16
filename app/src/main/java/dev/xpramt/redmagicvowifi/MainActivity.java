@@ -129,7 +129,7 @@ public class MainActivity extends Activity {
         group.setOrientation(RadioGroup.VERTICAL);
         addRadio(group, Config.STYLE_DEFAULT, "預設：不改 persist.custom.variant.id，通常使用 vowifi / vowifi_card1/2/12");
         addRadio(group, Config.STYLE_GEN_BD, "GEN_BD：等效 persist.custom.variant.id=GEN_BD，使用 bd_stat_vowifi / bd_vowifi_card1/2/12");
-        addRadio(group, Config.STYLE_ARRAY_HOOK, "Hook array：直接嘗試把 ImsUpdateFeature 指到 BD array，較乾淨但較依賴 ROM 版本");
+        addRadio(group, Config.STYLE_ARRAY_HOOK, "Hook array：僅 Root + LSPosed 模式生效，直接嘗試把 ImsUpdateFeature 指到 BD array");
 
         String current = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
         int checkedId = styleToId(current);
@@ -297,7 +297,7 @@ public class MainActivity extends Activity {
             commands.add(resetpropSet("ro.mifavor.custom", "home"));
         }
         String style = prefs.getString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
-        if (Config.STYLE_GEN_BD.equals(style) || Config.STYLE_ARRAY_HOOK.equals(style)) {
+        if (Config.STYLE_GEN_BD.equals(style)) {
             commands.add(resetpropSet("persist.custom.variant.id", "GEN_BD"));
         } else {
             commands.add(resetpropDelete("persist.custom.variant.id"));
