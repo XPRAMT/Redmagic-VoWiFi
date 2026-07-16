@@ -266,7 +266,7 @@ public class MainActivity extends Activity {
 
     private String resetpropDelete(String key) {
         return "if [ -x /data/adb/ksu/bin/resetprop ]; then /data/adb/ksu/bin/resetprop -d "
-                + key + "; else resetprop -d " + key + "; fi";
+                + key + " || true; else resetprop -d " + key + " || true; fi";
     }
 
     private List<String> globalApplyCommands() {
