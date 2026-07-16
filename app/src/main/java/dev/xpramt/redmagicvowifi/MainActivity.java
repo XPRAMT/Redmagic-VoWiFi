@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -12,8 +13,10 @@ import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
+import java.io.IOException;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
@@ -62,7 +65,7 @@ public class MainActivity extends Activity {
 
         root.addView(styleSection());
 
-        root.addView(text("套用方式：改完後重啟對應進程。Settings：am force-stop com.android.settings。SystemUI：su -c 'kill -9 $(pidof com.android.systemui)'。", 13, false));
+        root.addView(actionSection());
         return scrollView;
     }
 
@@ -102,6 +105,40 @@ public class MainActivity extends Activity {
             makePrefsReadable();
         });
         box.addView(group);
+        return box;
+    }
+
+    private LinearLayout actionSection() {
+        LinearLayout box = sectionBox();
+        box.addView(text("套用 / 重啟", 18, true));
+        box.addView(text("改完開關後，需要重啟對應進程才會重新載入 LSPosed hook。以下按鈕會使用 root 執行命令。", 13, false));
+
+        Button restartSettings = new Button(this);
+        restartSettings.setText("重啟 Settings");
+        restartSettings.setOnClickListener(view -> runRootCommand(
+                "am force-stop com.android.settings",
+                "已執行：am force-stop com.android.settings",
+                "重啟 Settings 失敗"
+        ));
+        box.addView(restartSettings);
+
+        Button restartSystemUi = new Button(this);
+        restartSystemUi.setText("重啟 SystemUI");
+        restartSystemUi.setOnClickListener(view -> runRootCommand(
+                "kill -9 $(pidof com.android.systemui)",
+                "已執行：kill -9 $(pidof com.android.systemui)",
+                "重啟 SystemUI 失敗"
+        ));
+        box.addView(restartSystemUi);
+
+        Button restartBoth = new Button(this);
+        restartBoth.setText("重啟 Settings + SystemUI");
+        restartBoth.setOnClickListener(view -> runRootCommand(
+                "am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)",
+                "已重啟 Settings + SystemUI",
+                "重啟失敗"
+        ));
+        box.addView(restartBoth);
         return box;
     }
 
@@ -158,5 +195,18 @@ public class MainActivity extends Activity {
         dir.setExecutable(true, false);
         dir.setReadable(true, false);
         file.setReadable(true, false);
+    }
+
+    private void runRootCommand(String command, String successMessage, String errorMessage) {
+        try {
+            Process process = new ProcessBuilder("su", "-c", command).redirectErrorStream(true).start();
+            int exitCode = process.waitFor();
+            Toast.makeText(this, exitCode == 0 ? successMessage : errorMessage + " (" + exitCode + ")", Toast.LENGTH_LONG).show();
+        } catch (IOException exception) {
+            Toast.makeText(this, errorMessage + "：無法取得 root", Toast.LENGTH_LONG).show();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            Toast.makeText(this, errorMessage + "：執行中斷", Toast.LENGTH_LONG).show();
+        }
     }
 }

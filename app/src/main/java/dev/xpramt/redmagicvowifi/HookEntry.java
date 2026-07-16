@@ -169,6 +169,7 @@ public class HookEntry implements IXposedHookLoadPackage {
 
     private Class<?> findZtePropertyClass(ClassLoader classLoader) {
         String[] classNames = new String[]{
+                "com.zte.settings.utils.SystemPropertiesZTE",
                 "com.zte.utils.SystemPropertiesZTE",
                 "com.zte.common.SystemPropertiesZTE",
                 "com.zte.mifavor.utils.SystemPropertiesZTE"
