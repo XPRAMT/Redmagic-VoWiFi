@@ -15,13 +15,16 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
+    private TextView actualValuesView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,6 +57,7 @@ public class MainActivity extends Activity {
         root.addView(title);
         root.addView(text("支援 Root 全域 resetprop 與 Root + LSPosed hook 兩種模式。", 14, false));
         root.addView(modeSection());
+        root.addView(actualValuesSection());
 
         root.addView(sectionSwitch(
                 "開啟 VoWiFi 設定",
@@ -70,6 +74,7 @@ public class MainActivity extends Activity {
         root.addView(styleSection());
 
         root.addView(actionSection());
+        refreshActualValues();
         return scrollView;
     }
 
@@ -86,9 +91,22 @@ public class MainActivity extends Activity {
         group.check(modeToId(current));
         group.setOnCheckedChangeListener((radioGroup, checked) -> {
             prefs.edit().putString(Config.KEY_OPERATION_MODE, idToMode(checked)).commit();
-            makePrefsReadable();
+            applyCurrentState("已切換模式並寫入目前設定", "模式切換寫入失敗");
         });
         box.addView(group);
+        return box;
+    }
+
+    private LinearLayout actualValuesSection() {
+        LinearLayout box = sectionBox();
+        box.addView(text("目前實際值", 18, true));
+        actualValuesView = text("讀取中...", 13, false);
+        box.addView(actualValuesView);
+
+        Button refresh = new Button(this);
+        refresh.setText("刷新實際值");
+        refresh.setOnClickListener(view -> refreshActualValues());
+        box.addView(refresh);
         return box;
     }
 
@@ -100,7 +118,7 @@ public class MainActivity extends Activity {
         sw.setChecked(prefs.getBoolean(key, true));
         sw.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(key, isChecked).commit();
-            makePrefsReadable();
+            applyCurrentState("已寫入：" + title, "寫入失敗");
         });
         box.addView(sw);
         box.addView(text(description, 13, false));
@@ -125,7 +143,7 @@ public class MainActivity extends Activity {
         }
         group.setOnCheckedChangeListener((radioGroup, checked) -> {
             prefs.edit().putString(Config.KEY_ICON_STYLE, idToStyle(checked)).commit();
-            makePrefsReadable();
+            applyCurrentState("已寫入：VoWiFi 圖標樣式", "圖標樣式寫入失敗");
         });
         box.addView(group);
         return box;
@@ -133,17 +151,8 @@ public class MainActivity extends Activity {
 
     private LinearLayout actionSection() {
         LinearLayout box = sectionBox();
-        box.addView(text("套用 / 重啟", 18, true));
-        box.addView(text("套用只同步目前開關對應的全域參數，不會重啟進程。Root 按鈕會使用 su。", 13, false));
-
-        Button applyGlobal = new Button(this);
-        applyGlobal.setText("套用");
-        applyGlobal.setOnClickListener(view -> runRootCommands(
-                globalApplyCommands(),
-                "已套用目前開關值",
-                "套用失敗"
-        ));
-        box.addView(applyGlobal);
+        box.addView(text("重啟", 18, true));
+        box.addView(text("開關變更會自動寫入。重啟按鈕只負責讓 Settings/SystemUI 重新讀取目前設定。Root 按鈕會使用 su。", 13, false));
 
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
@@ -269,6 +278,16 @@ public class MainActivity extends Activity {
                 + key + " || true; else resetprop -d " + key + " || true; fi";
     }
 
+    private void applyCurrentState(String successMessage, String errorMessage) {
+        makePrefsReadable();
+        if (Config.MODE_ROOT_GLOBAL.equals(prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED))) {
+            runRootCommands(globalApplyCommands(), successMessage, errorMessage);
+        } else {
+            refreshActualValues();
+            Toast.makeText(this, "已保存 LSPosed hook 設定", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private List<String> globalApplyCommands() {
         List<String> commands = new ArrayList<>();
         commands.add(resetpropSet(
@@ -324,6 +343,7 @@ public class MainActivity extends Activity {
                     return;
                 }
             }
+            refreshActualValues();
             Toast.makeText(this, successMessage, Toast.LENGTH_LONG).show();
         } catch (IOException exception) {
             Toast.makeText(this, errorMessage + "：無法取得 root", Toast.LENGTH_LONG).show();
@@ -331,5 +351,39 @@ public class MainActivity extends Activity {
             Thread.currentThread().interrupt();
             Toast.makeText(this, errorMessage + "：執行中斷", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void refreshActualValues() {
+        if (actualValuesView == null) {
+            return;
+        }
+        actualValuesView.setText(
+                "ro.vendor.feature.zte_feature_need_wfc_for_domestic = " + displayValue(getprop("ro.vendor.feature.zte_feature_need_wfc_for_domestic")) + "\n"
+                        + "ro.vendor.mifavor.custom = " + displayValue(getprop("ro.vendor.mifavor.custom")) + "\n"
+                        + "ro.mifavor.custom = " + displayValue(getprop("ro.mifavor.custom")) + "\n"
+                        + "persist.custom.variant.id = " + displayValue(getprop("persist.custom.variant.id"))
+        );
+    }
+
+    private String getprop(String key) {
+        try {
+            Process process = new ProcessBuilder("getprop", key).redirectErrorStream(true).start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String value = reader.readLine();
+            int exitCode = process.waitFor();
+            if (exitCode != 0 || value == null) {
+                return "";
+            }
+            return value.trim();
+        } catch (IOException exception) {
+            return "";
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return "";
+        }
+    }
+
+    private String displayValue(String value) {
+        return value == null || value.isEmpty() ? "(空)" : value;
     }
 }

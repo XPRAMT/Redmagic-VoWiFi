@@ -46,8 +46,9 @@ Then tap install on the phone.
 ## Mode 1: Root Global Mode
 
 Use this mode when you do not want LSPosed hooks.
-The app's `套用` button runs `resetprop` through root and synchronizes the current switch state.
-It does not restart Settings/SystemUI. Use the restart buttons after applying.
+Changing a switch immediately runs `resetprop` through root and synchronizes the current switch state.
+It does not restart Settings/SystemUI. Use the restart buttons after changing values.
+The app also shows the current system property values in `目前實際值`.
 
 Switch mapping:
 
@@ -62,7 +63,7 @@ Switch mapping:
   - Default/off: delete `persist.custom.variant.id`
   - Changing icon style takes effect after restarting SystemUI.
 
-After applying, restart separately:
+After changing values, restart separately:
 
 ```sh
 su
