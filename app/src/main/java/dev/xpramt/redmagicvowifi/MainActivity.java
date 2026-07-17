@@ -286,7 +286,7 @@ public class MainActivity extends Activity {
         backView.setVisibility(View.VISIBLE);
         contentRoot.removeAllViews();
         contentRoot.addView(launcherSection());
-        contentRoot.addView(text("生效條件：更換預設啟動器需要 root 執行系統 cmd package set-home-activity。隱藏最近任務需要 LSPosed 勾選 com.android.systemui scope，重啟 SystemUI 後在 Shell recent task provider 過濾第三方 HOME task。", 13, false));
+        contentRoot.addView(text("生效條件：更換預設啟動器需要 root 或 Shizuku 執行系統 cmd package set-home-activity。隱藏最近任務需要 LSPosed 勾選 com.zte.mifavor.launcher scope，重啟紅魔 Launcher 或手機後攔截手勢 current-task 卡片。", 13, false));
     }
 
     private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
