@@ -4,6 +4,8 @@ import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 import static de.robv.android.xposed.XposedHelpers.findClassIfExists;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.media.AudioManager;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -16,6 +18,7 @@ public class HookEntry implements IXposedHookLoadPackage {
     private static final String SETTINGS = "com.android.settings";
     private static final String SYSTEM_UI = "com.android.systemui";
     private static final String ANDROID = "android";
+    private static final String ZTE_AI_ASSISTANT = "com.zte.aiassistant";
     private static final int STREAM_MUSIC = AudioManager.STREAM_MUSIC;
     private static final int ADJUST_LOWER = AudioManager.ADJUST_LOWER;
     private static final int ADJUST_RAISE = AudioManager.ADJUST_RAISE;
@@ -26,6 +29,10 @@ public class HookEntry implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         if (ANDROID.equals(lpparam.packageName)) {
             hookAudioService(lpparam);
+            return;
+        }
+        if (ZTE_AI_ASSISTANT.equals(lpparam.packageName)) {
+            hookZteAssistantReceiver(lpparam);
             return;
         }
         if (!SETTINGS.equals(lpparam.packageName) && !SYSTEM_UI.equals(lpparam.packageName)) {
@@ -45,6 +52,7 @@ public class HookEntry implements IXposedHookLoadPackage {
             hookSettingsWfcGate(lpparam);
         }
         if (SYSTEM_UI.equals(lpparam.packageName)) {
+            hookSystemUiStartAssist(lpparam);
             if (config.enableStatusIcon) {
                 hookSystemUiAbroad(lpparam);
             }
@@ -54,6 +62,133 @@ public class HookEntry implements IXposedHookLoadPackage {
                 hookSystemUiBdArray(lpparam);
             }
         }
+    }
+
+    private void hookSystemUiStartAssist(XC_LoadPackage.LoadPackageParam lpparam) {
+        Class<?> commandQueue = findClassIfExists("com.android.systemui.statusbar.CommandQueue", lpparam.classLoader);
+        if (commandQueue == null) {
+            log("CommandQueue not found; assistant redirect skipped");
+            return;
+        }
+        try {
+            findAndHookMethod(commandQueue, "startAssist", android.os.Bundle.class, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Config.Snapshot config = Config.loadForHook();
+                    if (!config.assistantRedirectEnabled) {
+                        return;
+                    }
+                    Context context = contextFromObject(param.thisObject);
+                    if (context == null) {
+                        log("CommandQueue context unavailable");
+                        return;
+                    }
+                    if (launchAssistantTarget(context, config.assistantTarget)) {
+                        log("redirected SystemUI startAssist target=" + config.assistantTarget);
+                        param.setResult(null);
+                    }
+                }
+            });
+            log("SystemUI startAssist hook installed");
+        } catch (Throwable throwable) {
+            log("SystemUI startAssist hook failed: " + throwable);
+        }
+    }
+
+    private void hookZteAssistantReceiver(XC_LoadPackage.LoadPackageParam lpparam) {
+        Class<?> receiverClass = findClassIfExists("com.zte.aiassistant.receiver.UICommandReceiver", lpparam.classLoader);
+        if (receiverClass == null) {
+            log("UICommandReceiver not found");
+            return;
+        }
+        try {
+            findAndHookMethod(receiverClass, "onReceive", Context.class, Intent.class, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Config.Snapshot config = Config.loadForHook();
+                    if (!config.assistantRedirectEnabled) {
+                        return;
+                    }
+                    if (!(param.args[0] instanceof Context) || !(param.args[1] instanceof Intent)) {
+                        return;
+                    }
+                    Context context = (Context) param.args[0];
+                    Intent intent = (Intent) param.args[1];
+                    String action = intent.getAction();
+                    if (!isZteAssistantWakeAction(action)) {
+                        return;
+                    }
+                    if (launchAssistantTarget(context, config.assistantTarget)) {
+                        log("redirected ZTE assistant action=" + action + " target=" + config.assistantTarget);
+                        param.setResult(null);
+                    }
+                }
+            });
+            log("ZTE assistant receiver hook installed");
+        } catch (Throwable throwable) {
+            log("ZTE assistant receiver hook failed: " + throwable);
+        }
+    }
+
+    private boolean isZteAssistantWakeAction(String action) {
+        if (action == null) {
+            return false;
+        }
+        return "event_Home_Longpressed".equals(action)
+                || "event_Home_Longpressed_above26".equals(action)
+                || "event_home_Verylongpressed".equals(action)
+                || "com.zte.aiassistant.START_FLOW".equals(action)
+                || "com.zte.aiassistant.action.WAKEUP_TO_LISTEN".equals(action)
+                || "com.zte.aiassistant.action.AI_HALF_ENTRY_OUTER".equals(action)
+                || "com.zte.aiassistant.action.EXTERNAL_REQUEST".equals(action);
+    }
+
+    private boolean launchAssistantTarget(Context context, String target) {
+        Intent intent;
+        if (Config.ASSISTANT_TARGET_CHATGPT.equals(target)) {
+            intent = new Intent(Intent.ACTION_ASSIST);
+            intent.setPackage("com.openai.chatgpt");
+        } else if (Config.ASSISTANT_TARGET_GOOGLE_VOICE.equals(target)) {
+            intent = new Intent(Intent.ACTION_VOICE_COMMAND);
+            intent.setPackage("com.google.android.googlequicksearchbox");
+        } else {
+            intent = new Intent(Intent.ACTION_ASSIST);
+        }
+        intent.addCategory(Intent.CATEGORY_DEFAULT);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            context.startActivity(intent);
+            return true;
+        } catch (Throwable first) {
+            log("assistant target launch failed: " + first);
+            try {
+                Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse("googlequicksearchbox://assistant.google.com"));
+                fallback.setPackage("com.google.android.googlequicksearchbox");
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(fallback);
+                return true;
+            } catch (Throwable second) {
+                log("assistant fallback launch failed: " + second);
+                return false;
+            }
+        }
+    }
+
+    private Context contextFromObject(Object object) {
+        if (object instanceof Context) {
+            return (Context) object;
+        }
+        String[] fieldNames = new String[]{"mContext", "context"};
+        for (String fieldName : fieldNames) {
+            try {
+                Object value = XposedHelpers.getObjectField(object, fieldName);
+                if (value instanceof Context) {
+                    return (Context) value;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
     }
 
     private void hookAudioService(XC_LoadPackage.LoadPackageParam lpparam) {

@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private static final int PAGE_HOME = 0;
     private static final int PAGE_VOWIFI = 1;
     private static final int PAGE_VOLUME = 2;
+    private static final int PAGE_ASSISTANT = 3;
 
     private SharedPreferences prefs;
     private LinearLayout screen;
@@ -85,6 +86,11 @@ public class MainActivity extends Activity {
         if (!prefs.contains(Config.KEY_VOLUME_STEP_ENABLED)) {
             editor.putBoolean(Config.KEY_VOLUME_STEP_ENABLED, false);
             editor.putInt(Config.KEY_VOLUME_STEP, Config.DEFAULT_VOLUME_STEP);
+            changed = true;
+        }
+        if (!prefs.contains(Config.KEY_ASSISTANT_REDIRECT_ENABLED)) {
+            editor.putBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, false);
+            editor.putString(Config.KEY_ASSISTANT_TARGET, Config.ASSISTANT_TARGET_DEFAULT);
             changed = true;
         }
         if (changed) {
@@ -171,6 +177,11 @@ public class MainActivity extends Activity {
                 "自訂音量鍵每次增減 1 到 10 格，作用於媒體音量",
                 view -> showVolumePage()
         ));
+        contentRoot.addView(featureButton(
+                "魔姬手勢替換",
+                "攔截 SystemUI 的小白條長按 Assistant 入口，改啟動 Google、ChatGPT 或系統預設助手",
+                view -> showAssistantPage()
+        ));
     }
 
     private void showVoWifiPage() {
@@ -204,6 +215,15 @@ public class MainActivity extends Activity {
         contentRoot.removeAllViews();
         contentRoot.addView(volumeSection());
         contentRoot.addView(text("生效條件：LSPosed 需勾選 android scope，並重啟手機讓 system_server 載入模組。設定值會即時寫入，已載入 hook 後通常不需要重新安裝 APK。", 13, false));
+    }
+
+    private void showAssistantPage() {
+        currentPage = PAGE_ASSISTANT;
+        titleView.setText("魔姬手勢替換");
+        backView.setVisibility(View.VISIBLE);
+        contentRoot.removeAllViews();
+        contentRoot.addView(assistantSection());
+        contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 判定小白條長按要啟動 Assistant 時攔截，改啟動指定目標。", 13, false));
     }
 
     private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
@@ -270,6 +290,36 @@ public class MainActivity extends Activity {
 
     private int volumeStepFromSeekBar(SeekBar seekBar) {
         return Config.MIN_VOLUME_STEP + seekBar.getProgress();
+    }
+
+    private LinearLayout assistantSection() {
+        LinearLayout box = sectionBox();
+        Switch enabled = new Switch(this);
+        enabled.setText("啟用魔姬手勢替換");
+        enabled.setTextSize(18);
+        enabled.setTextColor(Color.WHITE);
+        enabled.setChecked(prefs.getBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, false));
+        enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
+            prefs.edit().putBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, isChecked).commit();
+            makePrefsReadable();
+            Toast.makeText(this, "已寫入魔姬手勢替換開關", Toast.LENGTH_LONG).show();
+        });
+        box.addView(enabled);
+        box.addView(text("攔截目標：com.android.systemui.statusbar.CommandQueue.startAssist(Bundle)\n原理：保留原廠小白條長按判斷與動畫，在 SystemUI 準備啟動 Assistant 時阻止原流程，改啟動指定目標。", 13, false));
+
+        RadioGroup group = new RadioGroup(this);
+        group.setOrientation(RadioGroup.VERTICAL);
+        addAssistantRadio(group, Config.ASSISTANT_TARGET_DEFAULT, "系統預設助手：啟動 android.intent.action.ASSIST");
+        addAssistantRadio(group, Config.ASSISTANT_TARGET_GOOGLE_VOICE, "Google 語音助手：啟動 android.intent.action.VOICE_COMMAND 並指定 Google app");
+        addAssistantRadio(group, Config.ASSISTANT_TARGET_CHATGPT, "ChatGPT：啟動 android.intent.action.ASSIST 並指定 ChatGPT app");
+        group.check(assistantTargetToId(prefs.getString(Config.KEY_ASSISTANT_TARGET, Config.ASSISTANT_TARGET_DEFAULT)));
+        group.setOnCheckedChangeListener((radioGroup, checked) -> {
+            prefs.edit().putString(Config.KEY_ASSISTANT_TARGET, idToAssistantTarget(checked)).commit();
+            makePrefsReadable();
+            Toast.makeText(this, "已寫入替換目標", Toast.LENGTH_SHORT).show();
+        });
+        box.addView(group);
+        return box;
     }
 
     private void setSystemBarIconColors(Window window) {
@@ -441,6 +491,16 @@ public class MainActivity extends Activity {
         group.addView(button);
     }
 
+    private void addAssistantRadio(RadioGroup group, String target, String label) {
+        RadioButton button = new RadioButton(this);
+        button.setId(assistantTargetToId(target));
+        button.setText(label);
+        button.setTextSize(14);
+        button.setTextColor(Color.WHITE);
+        button.setGravity(Gravity.CENTER_VERTICAL);
+        group.addView(button);
+    }
+
     private int styleToId(String style) {
         if (Config.STYLE_GEN_BD.equals(style)) return 1002;
         if (Config.STYLE_ARRAY_HOOK.equals(style)) return 1003;
@@ -451,6 +511,18 @@ public class MainActivity extends Activity {
         if (id == 1002) return Config.STYLE_GEN_BD;
         if (id == 1003) return Config.STYLE_ARRAY_HOOK;
         return Config.STYLE_DEFAULT;
+    }
+
+    private int assistantTargetToId(String target) {
+        if (Config.ASSISTANT_TARGET_GOOGLE_VOICE.equals(target)) return 3002;
+        if (Config.ASSISTANT_TARGET_CHATGPT.equals(target)) return 3003;
+        return 3001;
+    }
+
+    private String idToAssistantTarget(int id) {
+        if (id == 3002) return Config.ASSISTANT_TARGET_GOOGLE_VOICE;
+        if (id == 3003) return Config.ASSISTANT_TARGET_CHATGPT;
+        return Config.ASSISTANT_TARGET_DEFAULT;
     }
 
     private int modeToId(String mode) {
