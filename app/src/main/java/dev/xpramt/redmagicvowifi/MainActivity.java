@@ -177,19 +177,16 @@ public class MainActivity extends Activity {
         contentRoot.addView(featureButton(
                 "VoWiFi UI 修正",
                 "Wi-Fi Calling 設定、狀態列 VoWiFi 圖標、VoWiFi 圖標樣式",
-                "V",
                 view -> showVoWifiPage()
         ));
         contentRoot.addView(featureButton(
                 "音量步進調整",
                 "自訂音量鍵每次增減 1 到 10 格，作用於媒體音量",
-                "音",
                 view -> showVolumePage()
         ));
         contentRoot.addView(featureButton(
                 "魔姬手勢替換",
                 "攔截 SystemUI 的小白條長按 Assistant 入口，改啟動系統動作、使用者 App 或系統 App",
-                "手",
                 view -> showAssistantPage()
         ));
     }
@@ -236,11 +233,11 @@ public class MainActivity extends Activity {
         contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 發出小白條長按 assistant 事件前攔截，改啟動指定目標。選擇目標後會立即保存。", 13, false));
     }
 
-    private LinearLayout featureButton(String title, String description, String iconText, View.OnClickListener listener) {
+    private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(12), dp(12), dp(12), dp(12));
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -251,17 +248,9 @@ public class MainActivity extends Activity {
         card.setClickable(true);
         card.setOnClickListener(listener);
 
-        TextView icon = text(iconText, 17, true);
-        icon.setGravity(Gravity.CENTER);
-        icon.setBackground(cardBackground(Color.rgb(42, 48, 58)));
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(44), dp(44));
-        iconParams.setMargins(0, 0, dp(12), 0);
-        icon.setLayoutParams(iconParams);
-        card.addView(icon);
-
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        labels.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         labels.addView(text(title, 17, true));
         TextView detail = text(description, 13, false);
         detail.setTextColor(Color.rgb(190, 196, 205));
