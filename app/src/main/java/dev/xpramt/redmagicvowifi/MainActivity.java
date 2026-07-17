@@ -13,6 +13,8 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
@@ -59,6 +61,7 @@ public class MainActivity extends Activity {
     private static final String STOCK_LAUNCHER_PACKAGE = "com.zte.mifavor.launcher";
     private static final String STOCK_LAUNCHER_CLASS = "com.android.launcher3.uioverrides.QuickstepLauncher";
     private static final int SHIZUKU_REQUEST_CODE_HOME = 1001;
+    private static final int TOAST_DURATION_MS = 1500;
 
     private SharedPreferences prefs;
     private LinearLayout screen;
@@ -70,6 +73,7 @@ public class MainActivity extends Activity {
     private String pendingHomeCommand;
     private String pendingHomeSuccessMessage;
     private String pendingHomeErrorMessage;
+    private final Handler toastHandler = new Handler(Looper.getMainLooper());
     private final Shizuku.OnRequestPermissionResultListener shizukuPermissionListener =
             (requestCode, grantResult) -> {
                 if (requestCode != SHIZUKU_REQUEST_CODE_HOME) {
@@ -78,7 +82,7 @@ public class MainActivity extends Activity {
                 if (grantResult == PackageManager.PERMISSION_GRANTED && pendingHomeCommand != null) {
                     runHomeCommandWithShizuku(pendingHomeCommand, pendingHomeSuccessMessage, pendingHomeErrorMessage);
                 } else {
-                    Toast.makeText(this, "Shizuku 未授權，無法套用預設啟動器", Toast.LENGTH_LONG).show();
+                    showToast("Shizuku 未授權，無法套用預設啟動器");
                 }
                 pendingHomeCommand = null;
                 pendingHomeSuccessMessage = null;
@@ -336,7 +340,7 @@ public class MainActivity extends Activity {
 
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_VOLUME_STEP_ENABLED, isChecked).commit();
-            Toast.makeText(this, "已寫入音量步進開關", Toast.LENGTH_LONG).show();
+            showToast("已寫入音量步進開關");
         });
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -354,7 +358,7 @@ public class MainActivity extends Activity {
             @Override
             public void onStopTrackingTouch(SeekBar bar) {
                 prefs.edit().putInt(Config.KEY_VOLUME_STEP, volumeStepFromSeekBar(bar)).commit();
-                Toast.makeText(MainActivity.this, "已寫入音量步進值", Toast.LENGTH_SHORT).show();
+                showToast("已寫入音量步進值");
             }
         });
         box.addView(text("Hook 目標：android / com.android.server.audio.AudioService\n處理：adjustStreamVolume、adjustSuggestedStreamVolume\n範圍：只攔截媒體音量的音量鍵升降，步進值 1 到 10。", 13, false));
@@ -374,7 +378,7 @@ public class MainActivity extends Activity {
         enabled.setChecked(prefs.getBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, false));
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, isChecked).commit();
-            Toast.makeText(this, "已寫入魔姬手勢替換開關", Toast.LENGTH_LONG).show();
+            showToast("已寫入魔姬手勢替換開關");
         });
         box.addView(enabled);
         box.addView(text("攔截目標：SystemUI 內 Context.sendBroadcast / sendBroadcastAsUser 發出的 event_Home_Longpressed\n原理：保留原廠小白條長按判斷，在 SystemUI 發送魔姬喚醒事件前阻止原廣播，改啟動指定目標。", 13, false));
@@ -398,7 +402,7 @@ public class MainActivity extends Activity {
         enabled.setChecked(prefs.getBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, false));
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, isChecked).commit();
-            Toast.makeText(this, "已寫入最近任務隱藏開關", Toast.LENGTH_LONG).show();
+            showToast("已寫入最近任務隱藏開關");
         });
         box.addView(enabled);
         box.addView(text("需要 LSPosed 勾選 com.zte.mifavor.launcher scope。Hook 紅魔 Launcher 的 RecentsView#onGestureAnimationStart，只在手勢模式 current task 是選定第三方 HOME 時阻止它被補成最近任務卡片。", 13, false));
@@ -500,7 +504,7 @@ public class MainActivity extends Activity {
                     .putString(Config.KEY_LAUNCHER_COMPONENT, component)
                     .putString(Config.KEY_LAUNCHER_PACKAGE, packageName)
                     .commit();
-            Toast.makeText(this, "已選擇：" + title, Toast.LENGTH_SHORT).show();
+            showToast("已選擇：" + title);
             applyLauncherComponent(component);
             showLauncherPage();
         });
@@ -636,7 +640,7 @@ public class MainActivity extends Activity {
         card.setClickable(true);
         card.setOnClickListener(view -> {
             prefs.edit().putString(Config.KEY_ASSISTANT_TARGET, target).commit();
-            Toast.makeText(this, "已選擇：" + title, Toast.LENGTH_SHORT).show();
+            showToast("已選擇：" + title);
             showAssistantPage();
         });
 
@@ -766,7 +770,7 @@ public class MainActivity extends Activity {
         sw.setChecked(prefs.getBoolean(key, true));
         sw.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(key, isChecked).commit();
-            Toast.makeText(this, "已保存 LSPosed 設定：" + title, Toast.LENGTH_LONG).show();
+            showToast("已保存 LSPosed 設定：" + title);
         });
         box.addView(sw);
         box.addView(text(description, 13, false));
@@ -791,7 +795,7 @@ public class MainActivity extends Activity {
         }
         group.setOnCheckedChangeListener((radioGroup, checked) -> {
             prefs.edit().putString(Config.KEY_ICON_STYLE, idToStyle(checked)).commit();
-            Toast.makeText(this, "已保存 LSPosed 設定：VoWiFi 圖標樣式", Toast.LENGTH_LONG).show();
+            showToast("已保存 LSPosed 設定：VoWiFi 圖標樣式");
         });
         box.addView(group);
         return box;
@@ -925,11 +929,11 @@ public class MainActivity extends Activity {
     private void runHomeCommand(String command, String successMessage, String errorMessage) {
         int rootExitCode = runProcess(new ProcessBuilder("su", "-c", command));
         if (rootExitCode == 0) {
-            Toast.makeText(this, successMessage + "（root）", Toast.LENGTH_LONG).show();
+            showToast(successMessage + "（root）");
             return;
         }
         if (!isShizukuAvailable()) {
-            Toast.makeText(this, errorMessage + "：無 root，且 Shizuku 未連線", Toast.LENGTH_LONG).show();
+            showToast(errorMessage + "：無 root，且 Shizuku 未連線");
             return;
         }
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
@@ -937,7 +941,7 @@ public class MainActivity extends Activity {
             pendingHomeSuccessMessage = successMessage;
             pendingHomeErrorMessage = errorMessage;
             Shizuku.requestPermission(SHIZUKU_REQUEST_CODE_HOME);
-            Toast.makeText(this, "請授權 Shizuku 後自動套用預設啟動器", Toast.LENGTH_LONG).show();
+            showToast("請授權 Shizuku 後自動套用預設啟動器");
             return;
         }
         runHomeCommandWithShizuku(command, successMessage, errorMessage);
@@ -951,11 +955,11 @@ public class MainActivity extends Activity {
             Process process = (Process) newProcess.invoke(null,
                     new String[]{"sh", "-c", command}, null, null);
             int exitCode = process.waitFor();
-            Toast.makeText(this, exitCode == 0
+            showToast(exitCode == 0
                     ? successMessage + "（Shizuku）"
-                    : errorMessage + "（Shizuku " + exitCode + "）", Toast.LENGTH_LONG).show();
+                    : errorMessage + "（Shizuku " + exitCode + "）");
         } catch (Throwable throwable) {
-            Toast.makeText(this, errorMessage + "：Shizuku 執行失敗", Toast.LENGTH_LONG).show();
+            showToast(errorMessage + "：Shizuku 執行失敗");
         }
     }
 
@@ -983,13 +987,19 @@ public class MainActivity extends Activity {
         try {
             Process process = new ProcessBuilder("su", "-c", command).redirectErrorStream(true).start();
             int exitCode = process.waitFor();
-            Toast.makeText(this, exitCode == 0 ? successMessage : errorMessage + " (" + exitCode + ")", Toast.LENGTH_LONG).show();
+            showToast(exitCode == 0 ? successMessage : errorMessage + " (" + exitCode + ")");
         } catch (IOException exception) {
-            Toast.makeText(this, errorMessage + "：無法取得 root", Toast.LENGTH_LONG).show();
+            showToast(errorMessage + "：無法取得 root");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            Toast.makeText(this, errorMessage + "：執行中斷", Toast.LENGTH_LONG).show();
+            showToast(errorMessage + "：執行中斷");
         }
+    }
+
+    private void showToast(String message) {
+        Toast toast = Toast.makeText(this, message, Toast.LENGTH_LONG);
+        toast.show();
+        toastHandler.postDelayed(toast::cancel, TOAST_DURATION_MS);
     }
 
 }
