@@ -349,12 +349,17 @@ public class MainActivity extends Activity {
         button.setAllCaps(false);
         button.setText(label);
         button.setTextSize(13);
-        button.setEnabled(assistantTab != tab);
+        styleButton(button, assistantTab == tab, true);
         button.setOnClickListener(view -> {
+            if (assistantTab == tab) {
+                return;
+            }
             assistantTab = tab;
             showAssistantPage();
         });
-        button.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        params.setMargins(dp(4), 0, dp(4), 0);
+        button.setLayoutParams(params);
         return button;
     }
 
@@ -607,6 +612,7 @@ public class MainActivity extends Activity {
 
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
+        styleButton(restartSettings, false, false);
         restartSettings.setOnClickListener(view -> runRootCommand(
                 "am force-stop com.android.settings",
                 "已執行：am force-stop com.android.settings",
@@ -616,6 +622,7 @@ public class MainActivity extends Activity {
 
         Button restartSystemUi = new Button(this);
         restartSystemUi.setText("重啟 SystemUI");
+        styleButton(restartSystemUi, false, false);
         restartSystemUi.setOnClickListener(view -> runRootCommand(
                 "kill -9 $(pidof com.android.systemui)",
                 "已執行：kill -9 $(pidof com.android.systemui)",
@@ -625,6 +632,7 @@ public class MainActivity extends Activity {
 
         Button restartBoth = new Button(this);
         restartBoth.setText("重啟 Settings + SystemUI");
+        styleButton(restartBoth, true, false);
         restartBoth.setOnClickListener(view -> runRootCommand(
                 "am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)",
                 "已重啟 Settings + SystemUI",
@@ -633,6 +641,27 @@ public class MainActivity extends Activity {
         box.addView(restartBoth);
 
         return box;
+    }
+
+    private void styleButton(Button button, boolean selected, boolean compact) {
+        button.setAllCaps(false);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(compact ? 13 : 14);
+        button.setGravity(Gravity.CENTER);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setMinimumHeight(0);
+        button.setMinimumWidth(0);
+        button.setPadding(dp(12), 0, dp(12), 0);
+        button.setBackground(cardBackground(selected ? CARD_SELECTED_COLOR : CARD_COLOR));
+        if (button.getLayoutParams() == null) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(compact ? 44 : 48)
+            );
+            params.setMargins(0, dp(10), 0, 0);
+            button.setLayoutParams(params);
+        }
     }
 
     private void addModeRadio(RadioGroup group, String mode, String label) {
