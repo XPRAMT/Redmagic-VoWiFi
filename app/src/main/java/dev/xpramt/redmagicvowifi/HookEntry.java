@@ -542,71 +542,36 @@ public class HookEntry implements IXposedHookLoadPackage {
                 log("Launcher_MFV RecentTasksList data hook failed: " + throwable);
             }
         }
-        hookLauncherRunningTaskTile(lpparam);
+        hookLauncherGestureCurrentTask(lpparam);
     }
 
-    private void hookLauncherRunningTaskTile(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookLauncherGestureCurrentTask(XC_LoadPackage.LoadPackageParam lpparam) {
         Class<?> clazz = findClassIfExists("com.android.quickstep.views.RecentsView", lpparam.classLoader);
         if (clazz == null) {
-            log("Launcher_MFV RecentsView not found; running tile filter skipped");
+            log("Launcher_MFV RecentsView not found; gesture current task filter skipped");
             return;
         }
         try {
-            XposedBridge.hookAllMethods(clazz, "setRunningTaskHidden", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(clazz, "onGestureAnimationStart", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    logLauncherRunningTask("setRunningTaskHidden(" + param.args[0] + ")",
-                            param.thisObject);
+                    Config.Snapshot config = Config.loadForHook();
+                    if (!config.launcherOverrideEnabled || config.launcherPackage.isEmpty()
+                            || param.args == null || param.args.length == 0) {
+                        return;
+                    }
+                    Object groupedTaskInfo = param.args[0];
+                    if (!recentTaskBelongsToPackage(groupedTaskInfo, config.launcherPackage)) {
+                        return;
+                    }
+                    param.args[0] = null;
+                    log("Launcher_MFV onGestureAnimationStart skipped launcher running task package="
+                            + config.launcherPackage);
                 }
             });
-            XposedBridge.hookAllMethods(clazz, "setCurrentTask", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    logLauncherRunningTask("setCurrentTask(" + param.args[0] + ")",
-                            param.thisObject);
-                }
-            });
-            log("Launcher_MFV running task diagnostics installed");
+            log("Launcher_MFV gesture current task filter installed");
         } catch (Throwable throwable) {
-            log("Launcher_MFV running task diagnostics hook failed: " + throwable);
-        }
-    }
-
-    private void logLauncherRunningTask(String event, Object recentsView) {
-        Config.Snapshot config = Config.loadForHook();
-        if (!config.launcherOverrideEnabled || config.launcherPackage.isEmpty()) {
-            return;
-        }
-        try {
-            Object runningTaskView = XposedHelpers.callMethod(recentsView, "getRunningTaskView");
-            if (!recentTaskBelongsToPackage(runningTaskView, config.launcherPackage)) {
-                return;
-            }
-            Context context = getViewContext(recentsView);
-            int navigationMode = context == null ? -1 : android.provider.Settings.Secure.getInt(
-                    context.getContentResolver(), "navigation_mode", -1);
-            Object runningTaskViewId = XposedHelpers.callMethod(recentsView, "getRunningTaskViewId");
-            Object runningTaskIndex = XposedHelpers.callMethod(recentsView, "getRunningTaskIndex");
-            Object currentPage = XposedHelpers.callMethod(recentsView, "getCurrentPage");
-            Object nextPage = XposedHelpers.callMethod(recentsView, "getNextPage");
-            log("Launcher_MFV running task " + event
-                    + " package=" + config.launcherPackage
-                    + " nav=" + navigationMode
-                    + " viewId=" + runningTaskViewId
-                    + " index=" + runningTaskIndex
-                    + " currentPage=" + currentPage
-                    + " nextPage=" + nextPage);
-        } catch (Throwable throwable) {
-            log("Launcher_MFV running task diagnostics failed: " + throwable);
-        }
-    }
-
-    private Context getViewContext(Object view) {
-        try {
-            Object context = XposedHelpers.callMethod(view, "getContext");
-            return context instanceof Context ? (Context) context : null;
-        } catch (Throwable ignored) {
-            return null;
+            log("Launcher_MFV gesture current task hook failed: " + throwable);
         }
     }
 
