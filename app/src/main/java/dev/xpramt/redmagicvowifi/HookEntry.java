@@ -65,7 +65,6 @@ public class HookEntry implements IXposedHookLoadPackage {
             hookSystemUiStartAssist(lpparam);
             hookSystemUiAssistantBroadcast(lpparam);
             log("Recent UI hooks disabled to avoid Recents restart loop");
-            hookShellRecentTasksProvider(lpparam);
             if (config.enableStatusIcon) {
                 hookSystemUiAbroad(lpparam);
             }
