@@ -12,7 +12,9 @@ import android.hardware.camera2.CameraManager;
 import android.content.pm.PackageManager;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -310,8 +312,8 @@ public class HookEntry implements IXposedHookLoadPackage {
     }
 
     private void hookRecentUiFilter(XC_LoadPackage.LoadPackageParam lpparam) {
+        hookLauncherRecentTasksList(lpparam);
         String[] classNames = new String[]{
-                "com.android.quickstep.RecentTasksList",
                 "com.android.quickstep.RecentsModel",
                 "com.android.quickstep.views.RecentsView",
                 "com.android.quickstep.TaskOverlayFactory",
@@ -320,6 +322,45 @@ public class HookEntry implements IXposedHookLoadPackage {
         };
         for (String className : classNames) {
             hookRecentUiClass(lpparam, className);
+        }
+    }
+
+    private void hookLauncherRecentTasksList(XC_LoadPackage.LoadPackageParam lpparam) {
+        Class<?> clazz = findClassIfExists("com.android.quickstep.RecentTasksList", lpparam.classLoader);
+        if (clazz == null) {
+            return;
+        }
+        hookLauncherRecentConsumerMethod(clazz, "getTasks");
+        hookLauncherRecentConsumerMethod(clazz, "getTaskKeys");
+        try {
+            XposedBridge.hookAllMethods(clazz, "loadTasksInBackground", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    int removed = filterRecentMethodResult(param);
+                    if (removed > 0) {
+                        Config.Snapshot config = Config.loadForHook();
+                        log("Launcher_MFV loadTasksInBackground filtered package="
+                                + config.launcherPackage + " count=" + removed);
+                    }
+                }
+            });
+            log("Launcher_MFV RecentTasksList loadTasksInBackground filter installed");
+        } catch (Throwable throwable) {
+            log("Launcher_MFV loadTasksInBackground hook failed: " + throwable);
+        }
+    }
+
+    private void hookLauncherRecentConsumerMethod(Class<?> clazz, String methodName) {
+        try {
+            XposedBridge.hookAllMethods(clazz, methodName, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    wrapRecentConsumerArgs(param);
+                }
+            });
+            log("Launcher_MFV RecentTasksList#" + methodName + " consumer filter installed");
+        } catch (Throwable throwable) {
+            log("Launcher_MFV RecentTasksList#" + methodName + " hook failed: " + throwable);
         }
     }
 
@@ -395,6 +436,54 @@ public class HookEntry implements IXposedHookLoadPackage {
         }
     }
 
+    private void wrapRecentConsumerArgs(XC_MethodHook.MethodHookParam param) {
+        Config.Snapshot config = Config.loadForHook();
+        if (!config.launcherOverrideEnabled || config.launcherPackage.isEmpty() || param.args == null) {
+            return;
+        }
+        for (int i = 0; i < param.args.length; i++) {
+            Object arg = param.args[i];
+            if (arg != null && implementsInterface(arg.getClass(), "java.util.function.Consumer")) {
+                param.args[i] = filteredRecentConsumer(arg, config.launcherPackage);
+            }
+        }
+    }
+
+    private Object filteredRecentConsumer(Object originalConsumer, String packageName) {
+        ClassLoader classLoader = originalConsumer.getClass().getClassLoader();
+        Class<?> consumerClass;
+        try {
+            consumerClass = Class.forName("java.util.function.Consumer", false, classLoader);
+        } catch (Throwable throwable) {
+            consumerClass = java.util.function.Consumer.class;
+        }
+        InvocationHandler handler = (proxy, method, args) -> {
+            if ("accept".equals(method.getName()) && args != null && args.length == 1 && args[0] instanceof List) {
+                List<?> original = (List<?>) args[0];
+                List<?> filtered = filteredRecentList(original, packageName);
+                if (filtered != original) {
+                    log("Launcher_MFV consumer filtered package="
+                            + packageName + " count=" + (original.size() - filtered.size()));
+                    args[0] = filtered;
+                }
+            }
+            return method.invoke(originalConsumer, args);
+        };
+        return Proxy.newProxyInstance(classLoader, new Class[]{consumerClass}, handler);
+    }
+
+    private boolean implementsInterface(Class<?> clazz, String interfaceName) {
+        while (clazz != null) {
+            for (Class<?> iface : clazz.getInterfaces()) {
+                if (interfaceName.equals(iface.getName()) || implementsInterface(iface, interfaceName)) {
+                    return true;
+                }
+            }
+            clazz = clazz.getSuperclass();
+        }
+        return false;
+    }
+
     private int filterRecentMethodResult(XC_MethodHook.MethodHookParam param) {
         Config.Snapshot config = Config.loadForHook();
         if (!config.launcherOverrideEnabled || config.launcherPackage.isEmpty()) {
@@ -459,6 +548,34 @@ public class HookEntry implements IXposedHookLoadPackage {
         if (task == null || packageName == null || packageName.isEmpty()) {
             return false;
         }
+        try {
+            Object contains = XposedHelpers.callMethod(task, "containsPackage", packageName);
+            if (Boolean.TRUE.equals(contains)) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Object tasks = XposedHelpers.callMethod(task, "getTasks");
+            if (tasks instanceof List) {
+                for (Object childTask : (List<?>) tasks) {
+                    if (recentTaskBelongsToPackage(childTask, packageName)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        if (isThirdPartyHomeTask(task)) {
+            return true;
+        }
+        try {
+            Object key = XposedHelpers.getObjectField(task, "key");
+            if (isThirdPartyHomeTask(key)) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
         String[] componentFields = new String[]{"topActivity", "baseActivity", "origActivity", "realActivity"};
         for (String field : componentFields) {
             try {
@@ -497,6 +614,38 @@ public class HookEntry implements IXposedHookLoadPackage {
         } catch (Throwable ignored) {
         }
         return false;
+    }
+
+    private boolean isThirdPartyHomeTask(Object task) {
+        if (task == null) {
+            return false;
+        }
+        String[] intentFields = new String[]{"baseIntent", "intent"};
+        for (String field : intentFields) {
+            try {
+                Object value = XposedHelpers.getObjectField(task, field);
+                if (value instanceof Intent && isThirdPartyHomeIntent((Intent) value)) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        if (task instanceof Intent) {
+            return isThirdPartyHomeIntent((Intent) task);
+        }
+        return false;
+    }
+
+    private boolean isThirdPartyHomeIntent(Intent intent) {
+        if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) {
+            return false;
+        }
+        ComponentName component = intent.getComponent();
+        if (component == null) {
+            return false;
+        }
+        String packageName = component.getPackageName();
+        return packageName != null && !STOCK_LAUNCHER.equals(packageName);
     }
 
     private boolean objectGraphContainsPackage(Object object, String packageName, int depth) {
