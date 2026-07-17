@@ -74,7 +74,7 @@ public class HookEntry implements IXposedHookLoadPackage {
             }
         }
         if (STOCK_LAUNCHER.equals(lpparam.packageName)) {
-            log("Launcher_MFV hooks disabled to avoid Recents restart loop");
+            log("Launcher_MFV scope is not used by the stable build");
         }
     }
 
@@ -325,6 +325,30 @@ public class HookEntry implements IXposedHookLoadPackage {
         }
     }
 
+    private void hookLauncherSystemUiProxyRecentTasks(XC_LoadPackage.LoadPackageParam lpparam) {
+        Class<?> clazz = findClassIfExists("com.android.quickstep.SystemUiProxy", lpparam.classLoader);
+        if (clazz == null) {
+            log("Launcher_MFV SystemUiProxy not found; launcher recents filter skipped");
+            return;
+        }
+        try {
+            XposedBridge.hookAllMethods(clazz, "getRecentTasks", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    int removed = filterRecentMethodResult(param);
+                    if (removed > 0) {
+                        Config.Snapshot config = Config.loadForHook();
+                        log("Launcher_MFV SystemUiProxy#getRecentTasks filtered package="
+                                + config.launcherPackage + " count=" + removed);
+                    }
+                }
+            });
+            log("Launcher_MFV SystemUiProxy#getRecentTasks filter installed");
+        } catch (Throwable throwable) {
+            log("Launcher_MFV SystemUiProxy#getRecentTasks hook failed: " + throwable);
+        }
+    }
+
     private void hookLauncherRecentTasksList(XC_LoadPackage.LoadPackageParam lpparam) {
         Class<?> clazz = findClassIfExists("com.android.quickstep.RecentTasksList", lpparam.classLoader);
         if (clazz == null) {
@@ -557,6 +581,17 @@ public class HookEntry implements IXposedHookLoadPackage {
         }
         try {
             Object tasks = XposedHelpers.callMethod(task, "getTasks");
+            if (tasks instanceof List) {
+                for (Object childTask : (List<?>) tasks) {
+                    if (recentTaskBelongsToPackage(childTask, packageName)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Object tasks = XposedHelpers.callMethod(task, "E");
             if (tasks instanceof List) {
                 for (Object childTask : (List<?>) tasks) {
                     if (recentTaskBelongsToPackage(childTask, packageName)) {
