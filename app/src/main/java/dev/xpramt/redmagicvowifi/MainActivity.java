@@ -177,16 +177,19 @@ public class MainActivity extends Activity {
         contentRoot.addView(featureButton(
                 "VoWiFi UI 修正",
                 "Wi-Fi Calling 設定、狀態列 VoWiFi 圖標、VoWiFi 圖標樣式",
+                "V",
                 view -> showVoWifiPage()
         ));
         contentRoot.addView(featureButton(
                 "音量步進調整",
                 "自訂音量鍵每次增減 1 到 10 格，作用於媒體音量",
+                "音",
                 view -> showVolumePage()
         ));
         contentRoot.addView(featureButton(
                 "魔姬手勢替換",
                 "攔截 SystemUI 的小白條長按 Assistant 入口，改啟動系統動作、使用者 App 或系統 App",
+                "手",
                 view -> showAssistantPage()
         ));
     }
@@ -233,16 +236,38 @@ public class MainActivity extends Activity {
         contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 發出小白條長按 assistant 事件前攔截，改啟動指定目標。選擇目標後會立即保存。", 13, false));
     }
 
-    private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
-        LinearLayout box = sectionBox();
-        Button button = new Button(this);
-        button.setAllCaps(false);
-        button.setText(title);
-        button.setTextSize(18);
-        button.setOnClickListener(listener);
-        box.addView(button);
-        box.addView(text(description, 13, false));
-        return box;
+    private LinearLayout featureButton(String title, String description, String iconText, View.OnClickListener listener) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        cardParams.setMargins(0, dp(12), 0, dp(4));
+        card.setLayoutParams(cardParams);
+        card.setBackground(cardBackground(CARD_COLOR));
+        card.setClickable(true);
+        card.setOnClickListener(listener);
+
+        TextView icon = text(iconText, 17, true);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackground(cardBackground(Color.rgb(42, 48, 58)));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        iconParams.setMargins(0, 0, dp(12), 0);
+        icon.setLayoutParams(iconParams);
+        card.addView(icon);
+
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        labels.addView(text(title, 17, true));
+        TextView detail = text(description, 13, false);
+        detail.setTextColor(Color.rgb(190, 196, 205));
+        labels.addView(detail);
+        card.addView(labels);
+        return card;
     }
 
     private LinearLayout volumeSection() {
@@ -345,8 +370,8 @@ public class MainActivity extends Activity {
     }
 
     private void addSystemActions(LinearLayout box) {
-        box.addView(targetCard("語音助手", "啟動系統預設 android.intent.action.ASSIST", Config.TARGET_PREFIX_ACTION + Config.ACTION_DEFAULT_ASSIST, null, "A"));
-        box.addView(targetCard("Google 語音助手", "啟動 android.intent.action.VOICE_COMMAND 並指定 Google app", Config.TARGET_PREFIX_ACTION + Config.ACTION_GOOGLE_VOICE, null, "G"));
+        box.addView(targetCard("小助手", "啟動系統預設 android.intent.action.ASSIST", Config.TARGET_PREFIX_ACTION + Config.ACTION_DEFAULT_ASSIST, null, "小"));
+        box.addView(targetCard("語音助手", "啟動 android.intent.action.VOICE_COMMAND，實際助手依使用者系統設定", Config.TARGET_PREFIX_ACTION + Config.ACTION_GOOGLE_VOICE, null, "語"));
         box.addView(targetCard("最近應用", "送出 KEYCODE_APP_SWITCH", Config.TARGET_PREFIX_ACTION + Config.ACTION_RECENTS, null, "R"));
         box.addView(targetCard("螢幕截圖", "送出 KEYCODE_SYSRQ", Config.TARGET_PREFIX_ACTION + Config.ACTION_SCREENSHOT, null, "S"));
         box.addView(targetCard("手電筒", "透過 CameraManager 切換背面閃光燈", Config.TARGET_PREFIX_ACTION + Config.ACTION_FLASHLIGHT, null, "F"));
@@ -443,18 +468,18 @@ public class MainActivity extends Activity {
 
     private String assistantTargetLabel(String target) {
         if (target == null || target.isEmpty() || Config.ASSISTANT_TARGET_DEFAULT.equals(target)) {
-            return "語音助手";
+            return "小助手";
         }
         if (Config.ASSISTANT_TARGET_GOOGLE_VOICE.equals(target)) {
-            return "Google 語音助手";
+            return "語音助手";
         }
         if (Config.ASSISTANT_TARGET_CHATGPT.equals(target)) {
             return "ChatGPT";
         }
         if (target.startsWith(Config.TARGET_PREFIX_ACTION)) {
             String action = target.substring(Config.TARGET_PREFIX_ACTION.length());
-            if (Config.ACTION_DEFAULT_ASSIST.equals(action)) return "語音助手";
-            if (Config.ACTION_GOOGLE_VOICE.equals(action)) return "Google 語音助手";
+            if (Config.ACTION_DEFAULT_ASSIST.equals(action)) return "小助手";
+            if (Config.ACTION_GOOGLE_VOICE.equals(action)) return "語音助手";
             if (Config.ACTION_RECENTS.equals(action)) return "最近應用";
             if (Config.ACTION_SCREENSHOT.equals(action)) return "螢幕截圖";
             if (Config.ACTION_FLASHLIGHT.equals(action)) return "手電筒";
