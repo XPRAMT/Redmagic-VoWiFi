@@ -12,8 +12,9 @@ import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
 import android.text.style.URLSpan;
 import android.view.Gravity;
-import android.view.Window;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.Button;
@@ -23,6 +24,7 @@ import android.widget.PopupMenu;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -36,9 +38,17 @@ import java.util.List;
 
 public class MainActivity extends Activity {
     private static final int APP_BAR_COLOR = Color.rgb(23, 33, 44);
+    private static final int PAGE_HOME = 0;
+    private static final int PAGE_VOWIFI = 1;
+    private static final int PAGE_VOLUME = 2;
 
     private SharedPreferences prefs;
+    private LinearLayout screen;
+    private LinearLayout contentRoot;
+    private TextView titleView;
+    private TextView backView;
     private TextView actualValuesView;
+    private int currentPage = PAGE_HOME;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,24 +57,43 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.BLACK);
         prefs = Config.appPrefs(this);
         ensureDefaults();
-        setContentView(createContent());
+        setContentView(createShell());
         setSystemBarIconColors(getWindow());
+        showHome();
         makePrefsReadable();
     }
 
+    @Override
+    public void onBackPressed() {
+        if (currentPage != PAGE_HOME) {
+            showHome();
+            return;
+        }
+        super.onBackPressed();
+    }
+
     private void ensureDefaults() {
+        SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
         if (!prefs.contains(Config.KEY_ENABLE_WFC_SETTINGS)) {
-            prefs.edit()
-                    .putBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true)
-                    .putBoolean(Config.KEY_ENABLE_STATUS_ICON, true)
-                    .putString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD)
-                    .putString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED)
-                    .commit();
+            editor.putBoolean(Config.KEY_ENABLE_WFC_SETTINGS, true);
+            editor.putBoolean(Config.KEY_ENABLE_STATUS_ICON, true);
+            editor.putString(Config.KEY_ICON_STYLE, Config.STYLE_GEN_BD);
+            editor.putString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED);
+            changed = true;
+        }
+        if (!prefs.contains(Config.KEY_VOLUME_STEP_ENABLED)) {
+            editor.putBoolean(Config.KEY_VOLUME_STEP_ENABLED, false);
+            editor.putInt(Config.KEY_VOLUME_STEP, Config.DEFAULT_VOLUME_STEP);
+            changed = true;
+        }
+        if (changed) {
+            editor.commit();
         }
     }
 
-    private LinearLayout createContent() {
-        LinearLayout screen = new LinearLayout(this);
+    private LinearLayout createShell() {
+        screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
         screen.setBackgroundColor(Color.BLACK);
         screen.addView(appBar());
@@ -75,32 +104,11 @@ public class MainActivity extends Activity {
                 0,
                 1f
         ));
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
-        root.setPadding(dp(20), dp(10), dp(20), dp(28));
-        scrollView.addView(root);
-
-        root.addView(text("支援 Root 全域 resetprop 與 Root + LSPosed hook 兩種模式。", 14, false));
-        root.addView(modeSection());
-
-        root.addView(sectionSwitch(
-                "開啟 VoWiFi 設定",
-                "作用進程：com.android.settings\n等效參數：ro.vendor.feature.zte_feature_need_wfc_for_domestic=true\n用途：讓 Settings 的 ZTE 國內 WFC gate 通過，顯示 Wi-Fi Calling/VoWiFi 開關。仍需要 Pixel IMS 或 carrier config 啟用 WFC。",
-                Config.KEY_ENABLE_WFC_SETTINGS
-        ));
-
-        root.addView(sectionSwitch(
-                "開啟狀態列 VoWiFi 圖標",
-                "作用進程：com.android.systemui\n等效參數：ro.vendor.mifavor.custom=abroad / ro.mifavor.custom=abroad\n用途：讓 SystemUI 走 abroad IMS icon 分支，不再只顯示 HD/HD+。",
-                Config.KEY_ENABLE_STATUS_ICON
-        ));
-
-        root.addView(styleSection());
-
-        root.addView(actualValuesSection());
-        root.addView(actionSection());
-        refreshActualValues();
+        contentRoot = new LinearLayout(this);
+        contentRoot.setOrientation(LinearLayout.VERTICAL);
+        contentRoot.setBackgroundColor(Color.BLACK);
+        contentRoot.setPadding(dp(20), dp(14), dp(20), dp(28));
+        scrollView.addView(contentRoot);
         screen.addView(scrollView);
         return screen;
     }
@@ -110,10 +118,10 @@ public class MainActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setBackgroundColor(APP_BAR_COLOR);
-        bar.setPadding(dp(20), dp(10), dp(8), dp(10));
+        bar.setPadding(dp(8), dp(10), dp(8), dp(10));
         bar.setOnApplyWindowInsetsListener((view, insets) -> {
             int top = insets.getInsets(WindowInsets.Type.statusBars()).top;
-            view.setPadding(dp(20), top + dp(10), dp(8), dp(10));
+            view.setPadding(dp(8), top + dp(10), dp(8), dp(10));
             return insets;
         });
         bar.setLayoutParams(new LinearLayout.LayoutParams(
@@ -121,23 +129,147 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        TextView title = text("RedMagic VoWiFi", 20, true);
-        title.setLayoutParams(new LinearLayout.LayoutParams(
+        backView = text("<", 24, false);
+        backView.setGravity(Gravity.CENTER);
+        backView.setMinWidth(dp(48));
+        backView.setMinHeight(dp(48));
+        backView.setOnClickListener(view -> showHome());
+        bar.addView(backView);
+
+        titleView = text("RedMagic 工具", 20, true);
+        titleView.setLayoutParams(new LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 1f
         ));
-        bar.addView(title);
+        bar.addView(titleView);
 
         TextView menu = text("⋮", 24, false);
         menu.setGravity(Gravity.CENTER);
         menu.setBackgroundColor(Color.TRANSPARENT);
-        menu.setText("⋮");
         menu.setMinWidth(dp(48));
         menu.setMinHeight(dp(48));
         menu.setOnClickListener(view -> showOverflowMenu(menu));
         bar.addView(menu);
         return bar;
+    }
+
+    private void showHome() {
+        currentPage = PAGE_HOME;
+        titleView.setText("RedMagic 工具");
+        backView.setVisibility(View.INVISIBLE);
+        contentRoot.removeAllViews();
+        contentRoot.addView(text("選擇要調整的功能", 18, true));
+        contentRoot.addView(text("VoWiFi UI 修正處理中國版系統的設定頁與狀態列圖標。音量步進調整用 LSPosed 修改音量鍵每次增減的格數。", 13, false));
+        contentRoot.addView(featureButton(
+                "VoWiFi UI 修正",
+                "Wi-Fi Calling 設定、狀態列 VoWiFi 圖標、VoWiFi 圖標樣式",
+                view -> showVoWifiPage()
+        ));
+        contentRoot.addView(featureButton(
+                "音量步進調整",
+                "自訂音量鍵每次增減 1 到 10 格，作用於媒體音量",
+                view -> showVolumePage()
+        ));
+    }
+
+    private void showVoWifiPage() {
+        currentPage = PAGE_VOWIFI;
+        titleView.setText("VoWiFi UI 修正");
+        backView.setVisibility(View.VISIBLE);
+        contentRoot.removeAllViews();
+
+        contentRoot.addView(text("支援 Root 全域 resetprop 與 Root + LSPosed hook 兩種模式。", 14, false));
+        contentRoot.addView(modeSection());
+        contentRoot.addView(sectionSwitch(
+                "開啟 VoWiFi 設定",
+                "作用進程：com.android.settings\n等效參數：ro.vendor.feature.zte_feature_need_wfc_for_domestic=true\n用途：讓 Settings 的 ZTE 國內 WFC gate 通過，顯示 Wi-Fi Calling/VoWiFi 開關。仍需要 Pixel IMS 或 carrier config 啟用 WFC。",
+                Config.KEY_ENABLE_WFC_SETTINGS
+        ));
+        contentRoot.addView(sectionSwitch(
+                "開啟狀態列 VoWiFi 圖標",
+                "作用進程：com.android.systemui\n等效參數：ro.vendor.mifavor.custom=abroad / ro.mifavor.custom=abroad\n用途：讓 SystemUI 走 abroad IMS icon 分支，不再只顯示 HD/HD+。",
+                Config.KEY_ENABLE_STATUS_ICON
+        ));
+        contentRoot.addView(styleSection());
+        contentRoot.addView(actualValuesSection());
+        contentRoot.addView(actionSection());
+        refreshActualValues();
+    }
+
+    private void showVolumePage() {
+        currentPage = PAGE_VOLUME;
+        titleView.setText("音量步進調整");
+        backView.setVisibility(View.VISIBLE);
+        contentRoot.removeAllViews();
+        contentRoot.addView(volumeSection());
+        contentRoot.addView(text("生效條件：LSPosed 需勾選 android scope，並重啟手機讓 system_server 載入模組。設定值會即時寫入，已載入 hook 後通常不需要重新安裝 APK。", 13, false));
+    }
+
+    private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
+        LinearLayout box = sectionBox();
+        Button button = new Button(this);
+        button.setAllCaps(false);
+        button.setText(title);
+        button.setTextSize(18);
+        button.setOnClickListener(listener);
+        box.addView(button);
+        box.addView(text(description, 13, false));
+        return box;
+    }
+
+    private LinearLayout volumeSection() {
+        LinearLayout box = sectionBox();
+        Switch enabled = new Switch(this);
+        enabled.setText("啟用自訂音量步進");
+        enabled.setTextSize(18);
+        enabled.setTextColor(Color.WHITE);
+        enabled.setChecked(prefs.getBoolean(Config.KEY_VOLUME_STEP_ENABLED, false));
+        box.addView(enabled);
+
+        TextView stepLabel = text("", 16, true);
+        box.addView(stepLabel);
+
+        SeekBar seekBar = new SeekBar(this);
+        seekBar.setMax(Config.MAX_VOLUME_STEP - Config.MIN_VOLUME_STEP);
+        seekBar.setProgress(Config.clampVolumeStep(prefs.getInt(Config.KEY_VOLUME_STEP, Config.DEFAULT_VOLUME_STEP)) - Config.MIN_VOLUME_STEP);
+        box.addView(seekBar);
+
+        Runnable updateLabel = () -> stepLabel.setText("目前設定：" + volumeStepFromSeekBar(seekBar) + " / 10");
+        updateLabel.run();
+
+        enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
+            prefs.edit().putBoolean(Config.KEY_VOLUME_STEP_ENABLED, isChecked).commit();
+            makePrefsReadable();
+            Toast.makeText(this, "已寫入音量步進開關", Toast.LENGTH_LONG).show();
+        });
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                updateLabel.run();
+                if (fromUser) {
+                    prefs.edit().putInt(Config.KEY_VOLUME_STEP, volumeStepFromSeekBar(bar)).commit();
+                    makePrefsReadable();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar bar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar bar) {
+                prefs.edit().putInt(Config.KEY_VOLUME_STEP, volumeStepFromSeekBar(bar)).commit();
+                makePrefsReadable();
+                Toast.makeText(MainActivity.this, "已寫入音量步進值", Toast.LENGTH_SHORT).show();
+            }
+        });
+        box.addView(text("Hook 目標：android / com.android.server.audio.AudioService\n處理：adjustStreamVolume、adjustSuggestedStreamVolume\n範圍：只攔截媒體音量的音量鍵升降，步進值 1 到 10。", 13, false));
+        return box;
+    }
+
+    private int volumeStepFromSeekBar(SeekBar seekBar) {
+        return Config.MIN_VOLUME_STEP + seekBar.getProgress();
     }
 
     private void setSystemBarIconColors(Window window) {

@@ -13,6 +13,8 @@ final class Config {
     static final String KEY_ENABLE_STATUS_ICON = "enable_status_icon";
     static final String KEY_ICON_STYLE = "icon_style";
     static final String KEY_OPERATION_MODE = "operation_mode";
+    static final String KEY_VOLUME_STEP_ENABLED = "volume_step_enabled";
+    static final String KEY_VOLUME_STEP = "volume_step";
 
     static final String STYLE_DEFAULT = "default";
     static final String STYLE_GEN_BD = "gen_bd";
@@ -20,6 +22,10 @@ final class Config {
 
     static final String MODE_LSPOSED = "lsposed";
     static final String MODE_ROOT_GLOBAL = "root_global";
+
+    static final int DEFAULT_VOLUME_STEP = 1;
+    static final int MIN_VOLUME_STEP = 1;
+    static final int MAX_VOLUME_STEP = 10;
 
     private Config() {
     }
@@ -35,8 +41,16 @@ final class Config {
                 prefs.getString(KEY_OPERATION_MODE, MODE_LSPOSED),
                 prefs.getBoolean(KEY_ENABLE_WFC_SETTINGS, false),
                 prefs.getBoolean(KEY_ENABLE_STATUS_ICON, false),
-                prefs.getString(KEY_ICON_STYLE, STYLE_DEFAULT)
+                prefs.getString(KEY_ICON_STYLE, STYLE_DEFAULT),
+                prefs.getBoolean(KEY_VOLUME_STEP_ENABLED, false),
+                prefs.getInt(KEY_VOLUME_STEP, DEFAULT_VOLUME_STEP)
         );
+    }
+
+    static int clampVolumeStep(int value) {
+        if (value < MIN_VOLUME_STEP) return MIN_VOLUME_STEP;
+        if (value > MAX_VOLUME_STEP) return MAX_VOLUME_STEP;
+        return value;
     }
 
     static final class Snapshot {
@@ -44,12 +58,17 @@ final class Config {
         final boolean enableStatusIcon;
         final String iconStyle;
         final String operationMode;
+        final boolean volumeStepEnabled;
+        final int volumeStep;
 
-        Snapshot(String operationMode, boolean enableWfcSettings, boolean enableStatusIcon, String iconStyle) {
+        Snapshot(String operationMode, boolean enableWfcSettings, boolean enableStatusIcon, String iconStyle,
+                 boolean volumeStepEnabled, int volumeStep) {
             this.operationMode = operationMode == null ? MODE_LSPOSED : operationMode;
             this.enableWfcSettings = enableWfcSettings;
             this.enableStatusIcon = enableStatusIcon;
             this.iconStyle = iconStyle == null ? STYLE_DEFAULT : iconStyle;
+            this.volumeStepEnabled = volumeStepEnabled;
+            this.volumeStep = clampVolumeStep(volumeStep);
         }
     }
 }

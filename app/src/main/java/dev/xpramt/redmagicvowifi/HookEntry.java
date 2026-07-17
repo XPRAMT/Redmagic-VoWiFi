@@ -3,6 +3,9 @@ package dev.xpramt.redmagicvowifi;
 import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 import static de.robv.android.xposed.XposedHelpers.findClassIfExists;
 
+import android.content.Context;
+import android.media.AudioManager;
+
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -12,9 +15,19 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class HookEntry implements IXposedHookLoadPackage {
     private static final String SETTINGS = "com.android.settings";
     private static final String SYSTEM_UI = "com.android.systemui";
+    private static final String ANDROID = "android";
+    private static final int STREAM_MUSIC = AudioManager.STREAM_MUSIC;
+    private static final int ADJUST_LOWER = AudioManager.ADJUST_LOWER;
+    private static final int ADJUST_RAISE = AudioManager.ADJUST_RAISE;
+
+    private final ThreadLocal<Boolean> applyingVolume = new ThreadLocal<>();
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
+        if (ANDROID.equals(lpparam.packageName)) {
+            hookAudioService(lpparam);
+            return;
+        }
         if (!SETTINGS.equals(lpparam.packageName) && !SYSTEM_UI.equals(lpparam.packageName)) {
             return;
         }
@@ -23,7 +36,8 @@ public class HookEntry implements IXposedHookLoadPackage {
                 + " mode=" + config.operationMode
                 + " wfc=" + config.enableWfcSettings
                 + " icon=" + config.enableStatusIcon
-                + " style=" + config.iconStyle);
+                + " style=" + config.iconStyle
+                + " volumeStep=" + config.volumeStepEnabled + "/" + config.volumeStep);
         if (!Config.MODE_LSPOSED.equals(config.operationMode)) {
             return;
         }
@@ -40,6 +54,90 @@ public class HookEntry implements IXposedHookLoadPackage {
                 hookSystemUiBdArray(lpparam);
             }
         }
+    }
+
+    private void hookAudioService(XC_LoadPackage.LoadPackageParam lpparam) {
+        try {
+            Class<?> audioService = XposedHelpers.findClass("com.android.server.audio.AudioService", lpparam.classLoader);
+            XposedBridge.hookAllMethods(audioService, "adjustStreamVolume", new VolumeAdjustHook());
+            XposedBridge.hookAllMethods(audioService, "adjustSuggestedStreamVolume", new VolumeAdjustHook());
+            log("AudioService volume step hooks installed");
+        } catch (Throwable throwable) {
+            log("AudioService hook failed: " + throwable);
+        }
+    }
+
+    private final class VolumeAdjustHook extends XC_MethodHook {
+        @Override
+        protected void beforeHookedMethod(MethodHookParam param) {
+            if (Boolean.TRUE.equals(applyingVolume.get())) {
+                return;
+            }
+            Config.Snapshot config = Config.loadForHook();
+            if (!config.volumeStepEnabled) {
+                return;
+            }
+            int stream = intArg(param, 0, Integer.MIN_VALUE);
+            int direction = intArg(param, 1, 0);
+            int flags = intArg(param, 2, 0);
+            if (!shouldHandleVolume(stream, direction)) {
+                return;
+            }
+            AudioManager audioManager = audioManager(param.thisObject);
+            if (audioManager == null) {
+                log("AudioManager unavailable");
+                return;
+            }
+            try {
+                applyingVolume.set(true);
+                int current = audioManager.getStreamVolume(STREAM_MUSIC);
+                int min = audioManager.getStreamMinVolume(STREAM_MUSIC);
+                int max = audioManager.getStreamMaxVolume(STREAM_MUSIC);
+                int delta = direction == ADJUST_RAISE ? config.volumeStep : -config.volumeStep;
+                int target = clamp(current + delta, min, max);
+                if (target != current) {
+                    audioManager.setStreamVolume(STREAM_MUSIC, target, flags);
+                }
+                param.setResult(null);
+                log("music volume " + current + " -> " + target + " step=" + config.volumeStep);
+            } catch (Throwable throwable) {
+                log("custom volume step failed: " + throwable);
+            } finally {
+                applyingVolume.remove();
+            }
+        }
+    }
+
+    private boolean shouldHandleVolume(int stream, int direction) {
+        if (direction != ADJUST_RAISE && direction != ADJUST_LOWER) {
+            return false;
+        }
+        return stream == STREAM_MUSIC || stream == AudioManager.USE_DEFAULT_STREAM_TYPE;
+    }
+
+    private int intArg(XC_MethodHook.MethodHookParam param, int index, int fallback) {
+        if (param.args == null || index < 0 || index >= param.args.length || !(param.args[index] instanceof Integer)) {
+            return fallback;
+        }
+        return (Integer) param.args[index];
+    }
+
+    private AudioManager audioManager(Object audioService) {
+        try {
+            Object context = XposedHelpers.getObjectField(audioService, "mContext");
+            if (context instanceof Context) {
+                return (AudioManager) ((Context) context).getSystemService(Context.AUDIO_SERVICE);
+            }
+        } catch (Throwable throwable) {
+            log("mContext lookup failed: " + throwable);
+        }
+        return null;
+    }
+
+    private int clamp(int value, int min, int max) {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
     }
 
     private void hookSettingsWfcGate(XC_LoadPackage.LoadPackageParam lpparam) {
