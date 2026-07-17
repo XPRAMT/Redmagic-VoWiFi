@@ -16,6 +16,9 @@ final class Config {
     static final String KEY_VOLUME_STEP = "volume_step";
     static final String KEY_ASSISTANT_REDIRECT_ENABLED = "assistant_redirect_enabled";
     static final String KEY_ASSISTANT_TARGET = "assistant_target";
+    static final String KEY_LAUNCHER_OVERRIDE_ENABLED = "launcher_override_enabled";
+    static final String KEY_LAUNCHER_COMPONENT = "launcher_component";
+    static final String KEY_LAUNCHER_PACKAGE = "launcher_package";
 
     static final String STYLE_DEFAULT = "default";
     static final String STYLE_GEN_BD = "gen_bd";
@@ -57,7 +60,10 @@ final class Config {
                 prefs.getBoolean(KEY_VOLUME_STEP_ENABLED, false),
                 prefs.getInt(KEY_VOLUME_STEP, DEFAULT_VOLUME_STEP),
                 prefs.getBoolean(KEY_ASSISTANT_REDIRECT_ENABLED, false),
-                prefs.getString(KEY_ASSISTANT_TARGET, ASSISTANT_TARGET_DEFAULT)
+                prefs.getString(KEY_ASSISTANT_TARGET, ASSISTANT_TARGET_DEFAULT),
+                prefs.getBoolean(KEY_LAUNCHER_OVERRIDE_ENABLED, false),
+                prefs.getString(KEY_LAUNCHER_COMPONENT, ""),
+                prefs.getString(KEY_LAUNCHER_PACKAGE, "")
         );
     }
 
@@ -75,9 +81,13 @@ final class Config {
         final int volumeStep;
         final boolean assistantRedirectEnabled;
         final String assistantTarget;
+        final boolean launcherOverrideEnabled;
+        final String launcherComponent;
+        final String launcherPackage;
 
         Snapshot(boolean enableWfcSettings, boolean enableStatusIcon, String iconStyle, boolean volumeStepEnabled,
-                 int volumeStep, boolean assistantRedirectEnabled, String assistantTarget) {
+                 int volumeStep, boolean assistantRedirectEnabled, String assistantTarget,
+                 boolean launcherOverrideEnabled, String launcherComponent, String launcherPackage) {
             this.enableWfcSettings = enableWfcSettings;
             this.enableStatusIcon = enableStatusIcon;
             this.iconStyle = iconStyle == null ? STYLE_DEFAULT : iconStyle;
@@ -85,6 +95,9 @@ final class Config {
             this.volumeStep = clampVolumeStep(volumeStep);
             this.assistantRedirectEnabled = assistantRedirectEnabled;
             this.assistantTarget = assistantTarget == null ? ASSISTANT_TARGET_DEFAULT : assistantTarget;
+            this.launcherOverrideEnabled = launcherOverrideEnabled;
+            this.launcherComponent = launcherComponent == null ? "" : launcherComponent;
+            this.launcherPackage = launcherPackage == null ? "" : launcherPackage;
         }
     }
 }

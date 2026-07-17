@@ -2,7 +2,7 @@
 
 語言：[English](README.md) | 繁體中文
 
-非官方 RedMagic 系統調整工具，用於 VoWiFi UI、音量步進、小白條助手手勢替換。
+非官方 RedMagic 系統調整工具，用於 VoWiFi UI、音量步進、小白條助手手勢替換、第三方啟動器控制。
 
 測試裝置：RedMagic / Nubia NX809J 中國版 ROM。其它 RedMagic / Nubia 機型尚未測試，但若 Settings/SystemUI 使用相同 ZTE 屬性與類別，理論上可能可用。
 
@@ -16,6 +16,7 @@
   - [VoWiFi UI 修正](#vowifi-ui-修正)
   - [音量步進調整](#音量步進調整)
   - [魔姬手勢替換](#魔姬手勢替換)
+  - [第三方啟動器控制](#第三方啟動器控制)
 - [編譯](#編譯)
 - [注意事項](#注意事項)
 
@@ -38,6 +39,7 @@ VoWiFi 電信商能力本身仍需要 [Pixel IMS](https://github.com/kyujin-cho/
 | VoWiFi UI 修正 | `com.android.settings`、`com.android.systemui` |
 | 音量步進調整 | `android` / System Framework |
 | 魔姬手勢替換 | `com.android.systemui` |
+| 第三方啟動器控制 | `android` / System Framework |
 
 修改 VoWiFi 或手勢設定後，可在 App 內重啟 Settings/SystemUI，讓目標進程重新讀取設定。
 
@@ -95,6 +97,15 @@ BD 樣式使用 `bd_stat_vowifi.svg`：
 - 系統 App
 
 此功能不修改系統預設 assistant 設定，而是在 SystemUI 開啟原本助手目標前攔截並替換。
+
+### 第三方啟動器控制
+
+將選定的第三方啟動器設為預設 HOME，並避免該啟動器出現在最近使用 App 列表。
+
+- 啟動器選擇：列出可處理 `android.intent.action.MAIN` + `android.intent.category.HOME` 的 App
+- 套用預設啟動器：透過 root 執行 Android 內建的 `cmd package set-home-activity --user 0 <component>`
+- 最近任務過濾：Hook `android` / ActivityTaskManager 最近任務回傳點，移除 package 符合選定啟動器的任務
+- 作用域需求：LSPosed 需勾選 `android` / System Framework，並重啟手機讓 `system_server` 載入模組
 
 ## 編譯
 

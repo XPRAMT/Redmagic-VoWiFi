@@ -6,9 +6,13 @@ import static de.robv.android.xposed.XposedHelpers.findClassIfExists;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.ComponentName;
 import android.media.AudioManager;
 import android.hardware.camera2.CameraManager;
 import android.content.pm.PackageManager;
+
+import java.util.Iterator;
+import java.util.List;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -31,6 +35,7 @@ public class HookEntry implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         if (ANDROID.equals(lpparam.packageName)) {
             hookAudioService(lpparam);
+            hookRecentTasksFilter(lpparam);
             return;
         }
         if (!SETTINGS.equals(lpparam.packageName) && !SYSTEM_UI.equals(lpparam.packageName)) {
@@ -42,7 +47,8 @@ public class HookEntry implements IXposedHookLoadPackage {
                 + " icon=" + config.enableStatusIcon
                 + " style=" + config.iconStyle
                 + " volumeStep=" + config.volumeStepEnabled + "/" + config.volumeStep
-                + " assistant=" + config.assistantRedirectEnabled + "/" + config.assistantTarget);
+                + " assistant=" + config.assistantRedirectEnabled + "/" + config.assistantTarget
+                + " launcher=" + config.launcherOverrideEnabled + "/" + config.launcherPackage);
         if (SETTINGS.equals(lpparam.packageName) && config.enableWfcSettings) {
             hookSettingsWfcGate(lpparam);
         }
@@ -285,6 +291,105 @@ public class HookEntry implements IXposedHookLoadPackage {
         } catch (Throwable throwable) {
             log("AudioService hook failed: " + throwable);
         }
+    }
+
+    private void hookRecentTasksFilter(XC_LoadPackage.LoadPackageParam lpparam) {
+        hookRecentTasksMethod(lpparam, "com.android.server.wm.ActivityTaskManagerService", "getRecentTasks");
+        hookRecentTasksMethod(lpparam, "com.android.server.wm.RecentTasks", "getRecentTasks");
+        hookRecentTasksMethod(lpparam, "com.android.server.wm.RecentTasks", "getRecentTasksImpl");
+    }
+
+    private void hookRecentTasksMethod(XC_LoadPackage.LoadPackageParam lpparam, String className, String methodName) {
+        Class<?> clazz = findClassIfExists(className, lpparam.classLoader);
+        if (clazz == null) {
+            return;
+        }
+        try {
+            XposedBridge.hookAllMethods(clazz, methodName, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    Config.Snapshot config = Config.loadForHook();
+                    if (!config.launcherOverrideEnabled || config.launcherPackage.isEmpty()) {
+                        return;
+                    }
+                    int removed = filterRecentResult(param.getResult(), config.launcherPackage);
+                    if (removed > 0) {
+                        log("filtered launcher from recent tasks package=" + config.launcherPackage + " count=" + removed);
+                    }
+                }
+            });
+            log(className + "#" + methodName + " recent task filter installed");
+        } catch (Throwable throwable) {
+            log(className + "#" + methodName + " recent task filter failed: " + throwable);
+        }
+    }
+
+    private int filterRecentResult(Object result, String packageName) {
+        if (result == null) {
+            return 0;
+        }
+        if (result instanceof List) {
+            return filterRecentList((List<?>) result, packageName);
+        }
+        try {
+            Object list = XposedHelpers.callMethod(result, "getList");
+            if (list instanceof List) {
+                return filterRecentList((List<?>) list, packageName);
+            }
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    private int filterRecentList(List<?> tasks, String packageName) {
+        int removed = 0;
+        try {
+            Iterator<?> iterator = tasks.iterator();
+            while (iterator.hasNext()) {
+                Object task = iterator.next();
+                if (recentTaskBelongsToPackage(task, packageName)) {
+                    iterator.remove();
+                    removed++;
+                }
+            }
+        } catch (Throwable throwable) {
+            log("recent task list filter failed: " + throwable);
+        }
+        return removed;
+    }
+
+    private boolean recentTaskBelongsToPackage(Object task, String packageName) {
+        if (task == null || packageName == null || packageName.isEmpty()) {
+            return false;
+        }
+        String[] componentFields = new String[]{"topActivity", "baseActivity", "origActivity", "realActivity"};
+        for (String field : componentFields) {
+            try {
+                Object value = XposedHelpers.getObjectField(task, field);
+                if (value instanceof ComponentName && packageName.equals(((ComponentName) value).getPackageName())) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        String[] intentFields = new String[]{"baseIntent", "intent"};
+        for (String field : intentFields) {
+            try {
+                Object value = XposedHelpers.getObjectField(task, field);
+                if (value instanceof Intent) {
+                    ComponentName component = ((Intent) value).getComponent();
+                    if (component != null && packageName.equals(component.getPackageName())) {
+                        return true;
+                    }
+                    String intentPackage = ((Intent) value).getPackage();
+                    if (packageName.equals(intentPackage)) {
+                        return true;
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return false;
     }
 
     private final class VolumeAdjustHook extends XC_MethodHook {

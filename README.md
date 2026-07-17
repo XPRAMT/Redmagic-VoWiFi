@@ -2,7 +2,7 @@
 
 Language: English | [繁體中文](readme_TW.md)
 
-Unofficial RedMagic tweak toolkit for VoWiFi UI, volume step, and assistant gesture control.
+Unofficial RedMagic tweak toolkit for VoWiFi UI, volume step, assistant gesture control, and third-party launcher control.
 
 Tested device: RedMagic / Nubia NX809J China ROM. Other RedMagic / Nubia models have not been tested, but may work in theory if their Settings/SystemUI implementation uses the same ZTE properties and classes.
 
@@ -16,6 +16,7 @@ Tested device: RedMagic / Nubia NX809J China ROM. Other RedMagic / Nubia models 
   - [VoWiFi UI Fix](#vowifi-ui-fix)
   - [Volume Step Control](#volume-step-control)
   - [Assistant Gesture Redirect](#assistant-gesture-redirect)
+  - [Third-Party Launcher Control](#third-party-launcher-control)
 - [Build](#build)
 - [Notes](#notes)
 
@@ -38,6 +39,7 @@ Enable RedMagicX in LSPosed, then select scopes based on the features you use:
 | VoWiFi UI Fix | `com.android.settings`, `com.android.systemui` |
 | Volume Step Control | `android` / System Framework |
 | Assistant Gesture Redirect | `com.android.systemui` |
+| Third-Party Launcher Control | `android` / System Framework |
 
 After changing VoWiFi or assistant settings, restart Settings/SystemUI from the app so the target process reloads the settings.
 
@@ -95,6 +97,15 @@ Targets:
 - System apps
 
 This does not modify the system default assistant setting. It intercepts SystemUI before the RedMagic assistant broadcast opens the original assistant target.
+
+### Third-Party Launcher Control
+
+Sets a selected third-party launcher as the default HOME activity and hides that launcher from the recent apps list.
+
+- Launcher selection: lists apps that handle `android.intent.action.MAIN` + `android.intent.category.HOME`
+- Default launcher apply path: runs Android's own `cmd package set-home-activity --user 0 <component>` through root
+- Recent apps filter: hooks `android` / ActivityTaskManager recent-task return paths and removes tasks whose package matches the selected launcher
+- Scope requirement: LSPosed must include `android` / System Framework, then reboot the phone so `system_server` loads the module
 
 ## Build
 

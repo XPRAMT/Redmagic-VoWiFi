@@ -2,10 +2,13 @@ package dev.xpramt.redmagicvowifi;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ComponentName;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -45,6 +48,7 @@ public class MainActivity extends Activity {
     private static final int PAGE_VOWIFI = 1;
     private static final int PAGE_VOLUME = 2;
     private static final int PAGE_ASSISTANT = 3;
+    private static final int PAGE_LAUNCHER = 4;
     private static final int CARD_COLOR = Color.rgb(18, 18, 24);
     private static final int CARD_SELECTED_COLOR = Color.rgb(23, 33, 44);
 
@@ -94,6 +98,12 @@ public class MainActivity extends Activity {
         if (!prefs.contains(Config.KEY_ASSISTANT_REDIRECT_ENABLED)) {
             editor.putBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, false);
             editor.putString(Config.KEY_ASSISTANT_TARGET, Config.ASSISTANT_TARGET_DEFAULT);
+            changed = true;
+        }
+        if (!prefs.contains(Config.KEY_LAUNCHER_OVERRIDE_ENABLED)) {
+            editor.putBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, false);
+            editor.putString(Config.KEY_LAUNCHER_COMPONENT, "");
+            editor.putString(Config.KEY_LAUNCHER_PACKAGE, "");
             changed = true;
         }
         if (changed) {
@@ -185,6 +195,11 @@ public class MainActivity extends Activity {
                 "攔截 SystemUI 的小白條長按 Assistant 入口，改啟動系統動作、使用者 App 或系統 App",
                 view -> showAssistantPage()
         ));
+        contentRoot.addView(featureButton(
+                "第三方啟動器",
+                "設定預設 HOME，並從最近使用列表隱藏選定啟動器",
+                view -> showLauncherPage()
+        ));
     }
 
     private void showVoWifiPage() {
@@ -224,6 +239,15 @@ public class MainActivity extends Activity {
         contentRoot.removeAllViews();
         contentRoot.addView(assistantSection());
         contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 發出小白條長按 assistant 事件前攔截，改啟動指定目標。選擇目標後會立即保存。", 13, false));
+    }
+
+    private void showLauncherPage() {
+        currentPage = PAGE_LAUNCHER;
+        titleView.setText("第三方啟動器");
+        backView.setVisibility(View.VISIBLE);
+        contentRoot.removeAllViews();
+        contentRoot.addView(launcherSection());
+        contentRoot.addView(text("生效條件：更換預設啟動器需要 root 執行系統 cmd package set-home-activity。隱藏最近任務需要 LSPosed 勾選 android scope，並重啟手機讓 system_server 載入模組。", 13, false));
     }
 
     private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
@@ -327,6 +351,142 @@ public class MainActivity extends Activity {
         return box;
     }
 
+    private LinearLayout launcherSection() {
+        LinearLayout box = sectionBox();
+        Switch enabled = new Switch(this);
+        enabled.setText("從最近使用列表隱藏選定啟動器");
+        enabled.setTextSize(18);
+        enabled.setTextColor(Color.WHITE);
+        enabled.setChecked(prefs.getBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, false));
+        enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
+            prefs.edit().putBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, isChecked).commit();
+            Toast.makeText(this, "已寫入最近任務隱藏開關", Toast.LENGTH_LONG).show();
+        });
+        box.addView(enabled);
+        box.addView(text("更換 HOME：使用 root 執行系統 set-home-activity。\n隱藏最近任務：Hook android / ActivityTaskManagerService，過濾選定 launcher package。", 13, false));
+
+        String component = prefs.getString(Config.KEY_LAUNCHER_COMPONENT, "");
+        box.addView(text("目前啟動器：" + launcherLabel(component), 14, true));
+
+        Button applyHome = new Button(this);
+        applyHome.setText("套用為預設啟動器");
+        styleButton(applyHome, false, false);
+        applyHome.setOnClickListener(view -> applySelectedLauncher());
+        box.addView(applyHome);
+
+        box.addView(text("可用啟動器", 18, true));
+        List<ResolveInfo> launchers = installedLaunchers();
+        if (launchers.isEmpty()) {
+            box.addView(text("未找到可處理 HOME intent 的啟動器。", 13, false));
+        }
+        for (ResolveInfo info : launchers) {
+            String packageName = info.activityInfo.packageName;
+            String className = info.activityInfo.name;
+            ComponentName componentName = new ComponentName(packageName, className);
+            CharSequence label = info.loadLabel(getPackageManager());
+            String title = label == null ? packageName : label.toString();
+            String description = componentName.flattenToShortString();
+            Drawable icon = info.loadIcon(getPackageManager());
+            box.addView(launcherCard(title, description, componentName.flattenToString(), packageName, icon));
+        }
+        return box;
+    }
+
+    private void applySelectedLauncher() {
+        String component = prefs.getString(Config.KEY_LAUNCHER_COMPONENT, "");
+        if (component == null || component.isEmpty()) {
+            Toast.makeText(this, "請先選擇啟動器", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String commandComponent = ComponentName.unflattenFromString(component) == null
+                ? component
+                : ComponentName.unflattenFromString(component).flattenToShortString();
+        runRootCommand(
+                "cmd package set-home-activity --user 0 " + shellQuote(commandComponent),
+                "已套用預設啟動器",
+                "套用預設啟動器失敗"
+        );
+    }
+
+    private List<ResolveInfo> installedLaunchers() {
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        List<ResolveInfo> launchers = getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        Collections.sort(launchers, Comparator.comparing(info -> {
+            CharSequence label = info.loadLabel(getPackageManager());
+            return label == null ? info.activityInfo.packageName : label.toString();
+        }, String.CASE_INSENSITIVE_ORDER));
+        return launchers;
+    }
+
+    private LinearLayout launcherCard(String title, String description, String component, String packageName, Drawable icon) {
+        boolean selected = component.equals(prefs.getString(Config.KEY_LAUNCHER_COMPONENT, ""));
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        cardParams.setMargins(0, dp(8), 0, dp(4));
+        card.setLayoutParams(cardParams);
+        card.setBackground(cardBackground(selected ? CARD_SELECTED_COLOR : CARD_COLOR));
+        card.setClickable(true);
+        card.setOnClickListener(view -> {
+            prefs.edit()
+                    .putString(Config.KEY_LAUNCHER_COMPONENT, component)
+                    .putString(Config.KEY_LAUNCHER_PACKAGE, packageName)
+                    .commit();
+            Toast.makeText(this, "已選擇：" + title, Toast.LENGTH_SHORT).show();
+            showLauncherPage();
+        });
+
+        if (icon != null) {
+            ImageView image = new ImageView(this);
+            image.setImageDrawable(icon);
+            LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+            imageParams.setMargins(0, 0, dp(12), 0);
+            image.setLayoutParams(imageParams);
+            card.addView(image);
+        }
+
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        labels.addView(text(title, 15, true));
+        TextView descriptionView = text(description, 12, false);
+        descriptionView.setTextColor(Color.rgb(190, 196, 205));
+        labels.addView(descriptionView);
+        card.addView(labels);
+
+        TextView selectedMarker = text(selected ? "●" : "", 18, true);
+        selectedMarker.setTextColor(Color.WHITE);
+        selectedMarker.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(dp(28), dp(44));
+        markerParams.setMargins(dp(8), 0, 0, 0);
+        selectedMarker.setLayoutParams(markerParams);
+        card.addView(selectedMarker);
+        return card;
+    }
+
+    private String launcherLabel(String component) {
+        if (component == null || component.isEmpty()) {
+            return "未選擇";
+        }
+        ComponentName componentName = ComponentName.unflattenFromString(component);
+        if (componentName == null) {
+            return component;
+        }
+        try {
+            ApplicationInfo info = getPackageManager().getApplicationInfo(componentName.getPackageName(), 0);
+            return info.loadLabel(getPackageManager()) + " (" + componentName.flattenToShortString() + ")";
+        } catch (PackageManager.NameNotFoundException exception) {
+            return componentName.flattenToShortString();
+        }
+    }
+
     private LinearLayout assistantTabs() {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
@@ -362,6 +522,10 @@ public class MainActivity extends Activity {
         box.addView(targetCard("最近應用", "送出 KEYCODE_APP_SWITCH", Config.TARGET_PREFIX_ACTION + Config.ACTION_RECENTS, null, null));
         box.addView(targetCard("螢幕截圖", "送出 KEYCODE_SYSRQ", Config.TARGET_PREFIX_ACTION + Config.ACTION_SCREENSHOT, null, null));
         box.addView(targetCard("手電筒", "透過 CameraManager 切換背面閃光燈", Config.TARGET_PREFIX_ACTION + Config.ACTION_FLASHLIGHT, null, null));
+    }
+
+    private String shellQuote(String value) {
+        return "'" + value.replace("'", "'\\''") + "'";
     }
 
     private void addAppList(LinearLayout box, boolean systemApps) {
