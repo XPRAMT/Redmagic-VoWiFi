@@ -39,7 +39,7 @@ Enable RedMagicX in LSPosed, then select scopes based on the features you use:
 | VoWiFi UI Fix | `com.android.settings`, `com.android.systemui` |
 | Volume Step Control | `android` / System Framework |
 | Assistant Gesture Redirect | `com.android.systemui` |
-| Third-Party Launcher Control | `android` / System Framework |
+| Third-Party Launcher Control | `com.zte.mifavor.launcher` |
 
 After changing VoWiFi or assistant settings, restart Settings/SystemUI from the app so the target process reloads the settings.
 
@@ -103,9 +103,9 @@ This does not modify the system default assistant setting. It intercepts SystemU
 Sets a selected third-party launcher as the default HOME activity and hides that launcher from the recent apps list.
 
 - Launcher selection: lists apps that handle `android.intent.action.MAIN` + `android.intent.category.HOME`
-- Default launcher apply path: runs Android's own `cmd package set-home-activity --user 0 <component>` through root
-- Recent apps filter: hooks `android` / ActivityTaskManager recent-task return paths and removes tasks whose package matches the selected launcher
-- Scope requirement: LSPosed must include `android` / System Framework, then reboot the phone so `system_server` loads the module
+- Default launcher apply path: runs Android's own `cmd package set-home-activity --user 0 <component>` through root, or through Shizuku shell permission on non-root devices
+- Recent apps filter: hooks RedMagic Launcher `RecentsView#onGestureAnimationStart` and blocks the selected third-party HOME task from being inserted as the gesture current-task card
+- Scope requirement: LSPosed must include `com.zte.mifavor.launcher`, then restart RedMagic Launcher or reboot the phone so the Launcher process loads the module
 
 ## Build
 

@@ -39,7 +39,7 @@ VoWiFi 電信商能力本身仍需要 [Pixel IMS](https://github.com/kyujin-cho/
 | VoWiFi UI 修正 | `com.android.settings`、`com.android.systemui` |
 | 音量步進調整 | `android` / System Framework |
 | 魔姬手勢替換 | `com.android.systemui` |
-| 第三方啟動器控制 | `android` / System Framework |
+| 第三方啟動器控制 | `com.zte.mifavor.launcher` |
 
 修改 VoWiFi 或手勢設定後，可在 App 內重啟 Settings/SystemUI，讓目標進程重新讀取設定。
 
@@ -103,9 +103,9 @@ BD 樣式使用 `bd_stat_vowifi.svg`：
 將選定的第三方啟動器設為預設 HOME，並避免該啟動器出現在最近使用 App 列表。
 
 - 啟動器選擇：列出可處理 `android.intent.action.MAIN` + `android.intent.category.HOME` 的 App
-- 套用預設啟動器：透過 root 執行 Android 內建的 `cmd package set-home-activity --user 0 <component>`
-- 最近任務過濾：Hook `android` / ActivityTaskManager 最近任務回傳點，移除 package 符合選定啟動器的任務
-- 作用域需求：LSPosed 需勾選 `android` / System Framework，並重啟手機讓 `system_server` 載入模組
+- 套用預設啟動器：透過 root 執行 Android 內建的 `cmd package set-home-activity --user 0 <component>`；無 root 時可透過 Shizuku shell 權限執行
+- 最近任務過濾：Hook 紅魔 Launcher `RecentsView#onGestureAnimationStart`，阻止選定第三方 HOME task 被手勢流程補成 current-task 卡片
+- 作用域需求：LSPosed 需勾選 `com.zte.mifavor.launcher`，並重啟紅魔 Launcher 或手機讓 Launcher 進程載入模組
 
 ## 編譯
 

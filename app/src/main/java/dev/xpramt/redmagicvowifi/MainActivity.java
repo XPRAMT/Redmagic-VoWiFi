@@ -37,10 +37,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+
+import rikka.shizuku.Shizuku;
 
 public class MainActivity extends Activity {
     private static final int APP_BAR_COLOR = Color.rgb(23, 33, 44);
@@ -55,6 +58,7 @@ public class MainActivity extends Activity {
     private static final String SETTINGS_FALLBACK_HOME_CLASS = "com.android.settings.FallbackHome";
     private static final String STOCK_LAUNCHER_PACKAGE = "com.zte.mifavor.launcher";
     private static final String STOCK_LAUNCHER_CLASS = "com.android.launcher3.uioverrides.QuickstepLauncher";
+    private static final int SHIZUKU_REQUEST_CODE_HOME = 1001;
 
     private SharedPreferences prefs;
     private LinearLayout screen;
@@ -63,6 +67,23 @@ public class MainActivity extends Activity {
     private TextView backView;
     private int currentPage = PAGE_HOME;
     private int assistantTab = 0;
+    private String pendingHomeCommand;
+    private String pendingHomeSuccessMessage;
+    private String pendingHomeErrorMessage;
+    private final Shizuku.OnRequestPermissionResultListener shizukuPermissionListener =
+            (requestCode, grantResult) -> {
+                if (requestCode != SHIZUKU_REQUEST_CODE_HOME) {
+                    return;
+                }
+                if (grantResult == PackageManager.PERMISSION_GRANTED && pendingHomeCommand != null) {
+                    runHomeCommandWithShizuku(pendingHomeCommand, pendingHomeSuccessMessage, pendingHomeErrorMessage);
+                } else {
+                    Toast.makeText(this, "Shizuku 未授權，無法套用預設啟動器", Toast.LENGTH_LONG).show();
+                }
+                pendingHomeCommand = null;
+                pendingHomeSuccessMessage = null;
+                pendingHomeErrorMessage = null;
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,10 +91,17 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(APP_BAR_COLOR);
         getWindow().setNavigationBarColor(Color.BLACK);
         prefs = Config.appPrefs(this);
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener);
         ensureDefaults();
         setContentView(createShell());
         setSystemBarIconColors(getWindow());
         showHome();
+    }
+
+    @Override
+    protected void onDestroy() {
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener);
+        super.onDestroy();
     }
 
     @Override
@@ -374,7 +402,7 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "已寫入最近任務隱藏開關", Toast.LENGTH_LONG).show();
         });
         box.addView(enabled);
-        box.addView(text("更換 HOME：使用 root 執行系統 set-home-activity。\n隱藏最近任務：Hook com.android.systemui / RecentTasksController#getRecentTasks，在 Shell provider 回傳資料給 Launcher 前過濾第三方 HOME task；不 hook Launcher UI。\n系統 FallbackHome 不會列為可選項；需要 fallback 時使用紅魔原廠 com.zte.mifavor.launcher。", 13, false));
+        box.addView(text("更換 HOME：優先使用 root 執行系統 set-home-activity；無 root 時可透過 Shizuku 授權使用 shell 權限套用。\n隱藏最近任務：LSPosed Hook 紅魔 Launcher / RecentsView#onGestureAnimationStart，只在手勢模式 current task 是選定第三方 HOME 時阻止它被補成最近任務卡片。\n系統 FallbackHome 不會列為可選項；需要 fallback 時使用紅魔原廠 com.zte.mifavor.launcher。", 13, false));
 
         String component = prefs.getString(Config.KEY_LAUNCHER_COMPONENT, "");
         if (isSettingsFallbackHome(component)) {
@@ -419,7 +447,7 @@ public class MainActivity extends Activity {
         String commandComponent = ComponentName.unflattenFromString(component) == null
                 ? component
                 : ComponentName.unflattenFromString(component).flattenToShortString();
-        runRootCommand(
+        runHomeCommand(
                 "cmd package set-home-activity --user 0 " + shellQuote(commandComponent),
                 "已套用預設啟動器",
                 "套用預設啟動器失敗"
@@ -883,6 +911,63 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void runHomeCommand(String command, String successMessage, String errorMessage) {
+        int rootExitCode = runProcess(new ProcessBuilder("su", "-c", command));
+        if (rootExitCode == 0) {
+            Toast.makeText(this, successMessage + "（root）", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!isShizukuAvailable()) {
+            Toast.makeText(this, errorMessage + "：無 root，且 Shizuku 未連線", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            pendingHomeCommand = command;
+            pendingHomeSuccessMessage = successMessage;
+            pendingHomeErrorMessage = errorMessage;
+            Shizuku.requestPermission(SHIZUKU_REQUEST_CODE_HOME);
+            Toast.makeText(this, "請授權 Shizuku 後自動套用預設啟動器", Toast.LENGTH_LONG).show();
+            return;
+        }
+        runHomeCommandWithShizuku(command, successMessage, errorMessage);
+    }
+
+    private void runHomeCommandWithShizuku(String command, String successMessage, String errorMessage) {
+        try {
+            Method newProcess = Shizuku.class.getDeclaredMethod(
+                    "newProcess", String[].class, String[].class, String.class);
+            newProcess.setAccessible(true);
+            Process process = (Process) newProcess.invoke(null,
+                    new String[]{"sh", "-c", command}, null, null);
+            int exitCode = process.waitFor();
+            Toast.makeText(this, exitCode == 0
+                    ? successMessage + "（Shizuku）"
+                    : errorMessage + "（Shizuku " + exitCode + "）", Toast.LENGTH_LONG).show();
+        } catch (Throwable throwable) {
+            Toast.makeText(this, errorMessage + "：Shizuku 執行失敗", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private boolean isShizukuAvailable() {
+        try {
+            return Shizuku.pingBinder();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private int runProcess(ProcessBuilder processBuilder) {
+        try {
+            Process process = processBuilder.redirectErrorStream(true).start();
+            return process.waitFor();
+        } catch (IOException exception) {
+            return -1;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return -1;
+        }
     }
 
     private void runRootCommand(String command, String successMessage, String errorMessage) {
