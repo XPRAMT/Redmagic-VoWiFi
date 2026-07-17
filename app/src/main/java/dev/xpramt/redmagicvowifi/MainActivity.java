@@ -403,7 +403,7 @@ public class MainActivity extends Activity {
         box.addView(enabled);
         box.addView(text("隱藏最近任務：需要 LSPosed 勾選 com.zte.mifavor.launcher scope。Hook 紅魔 Launcher 的 RecentsView#onGestureAnimationStart，只在手勢模式 current task 是選定第三方 HOME 時阻止它被補成最近任務卡片。", 13, false));
         box.addView(verticalSpace(14));
-        box.addView(text("更換 HOME", 16, true));
+        box.addView(text("更換啟動器", 16, true));
         box.addView(text("優先使用 root 執行系統 set-home-activity；無 root 時可透過 Shizuku 授權使用 shell 權限套用。", 13, false));
 
         String component = prefs.getString(Config.KEY_LAUNCHER_COMPONENT, "");
@@ -415,7 +415,6 @@ public class MainActivity extends Activity {
                     .commit();
         }
 
-        box.addView(text("可用啟動器", 18, true));
         List<ResolveInfo> launchers = installedLaunchers();
         if (launchers.isEmpty()) {
             box.addView(text("未找到可處理 HOME intent 的啟動器。", 13, false));
