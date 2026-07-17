@@ -37,7 +37,11 @@ final class Config {
     }
 
     static SharedPreferences appPrefs(Context context) {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_WORLD_READABLE);
+        try {
+            return context.getSharedPreferences(PREFS_NAME, Context.MODE_WORLD_READABLE);
+        } catch (SecurityException exception) {
+            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        }
     }
 
     static Snapshot loadForHook() {

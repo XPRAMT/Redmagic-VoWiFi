@@ -4,6 +4,7 @@ import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 import static de.robv.android.xposed.XposedHelpers.findClassIfExists;
 
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.net.Uri;
 import android.media.AudioManager;
@@ -18,7 +19,6 @@ public class HookEntry implements IXposedHookLoadPackage {
     private static final String SETTINGS = "com.android.settings";
     private static final String SYSTEM_UI = "com.android.systemui";
     private static final String ANDROID = "android";
-    private static final String ZTE_AI_ASSISTANT = "com.zte.aiassistant";
     private static final int STREAM_MUSIC = AudioManager.STREAM_MUSIC;
     private static final int ADJUST_LOWER = AudioManager.ADJUST_LOWER;
     private static final int ADJUST_RAISE = AudioManager.ADJUST_RAISE;
@@ -31,10 +31,6 @@ public class HookEntry implements IXposedHookLoadPackage {
             hookAudioService(lpparam);
             return;
         }
-        if (ZTE_AI_ASSISTANT.equals(lpparam.packageName)) {
-            hookZteAssistantReceiver(lpparam);
-            return;
-        }
         if (!SETTINGS.equals(lpparam.packageName) && !SYSTEM_UI.equals(lpparam.packageName)) {
             return;
         }
@@ -44,7 +40,8 @@ public class HookEntry implements IXposedHookLoadPackage {
                 + " wfc=" + config.enableWfcSettings
                 + " icon=" + config.enableStatusIcon
                 + " style=" + config.iconStyle
-                + " volumeStep=" + config.volumeStepEnabled + "/" + config.volumeStep);
+                + " volumeStep=" + config.volumeStepEnabled + "/" + config.volumeStep
+                + " assistant=" + config.assistantRedirectEnabled + "/" + config.assistantTarget);
         if (!Config.MODE_LSPOSED.equals(config.operationMode)) {
             return;
         }
@@ -53,6 +50,7 @@ public class HookEntry implements IXposedHookLoadPackage {
         }
         if (SYSTEM_UI.equals(lpparam.packageName)) {
             hookSystemUiStartAssist(lpparam);
+            hookSystemUiAssistantBroadcast(lpparam);
             if (config.enableStatusIcon) {
                 hookSystemUiAbroad(lpparam);
             }
@@ -62,6 +60,64 @@ public class HookEntry implements IXposedHookLoadPackage {
                 hookSystemUiBdArray(lpparam);
             }
         }
+    }
+
+    private void hookSystemUiAssistantBroadcast(XC_LoadPackage.LoadPackageParam lpparam) {
+        hookBroadcastMethods(ContextWrapper.class, "ContextWrapper");
+        Class<?> contextImpl = findClassIfExists("android.app.ContextImpl", lpparam.classLoader);
+        if (contextImpl != null) {
+            hookBroadcastMethods(contextImpl, "ContextImpl");
+        } else {
+            log("ContextImpl not found; assistant broadcast hook partially installed");
+        }
+    }
+
+    private void hookBroadcastMethods(Class<?> contextClass, String label) {
+        XC_MethodHook hook = new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                Intent intent = firstIntentArg(param.args);
+                if (intent == null || !isZteAssistantWakeAction(intent.getAction())) {
+                    return;
+                }
+                Config.Snapshot config = Config.loadForHook();
+                if (!config.assistantRedirectEnabled) {
+                    log("assistant broadcast observed but redirect disabled action=" + intent.getAction());
+                    return;
+                }
+                Context context = contextFromObject(param.thisObject);
+                if (context == null) {
+                    log("assistant broadcast context unavailable action=" + intent.getAction());
+                    return;
+                }
+                if (launchAssistantTarget(context, config.assistantTarget)) {
+                    log("redirected SystemUI assistant broadcast action=" + intent.getAction()
+                            + " target=" + config.assistantTarget);
+                    param.setResult(null);
+                }
+            }
+        };
+        try {
+            XposedBridge.hookAllMethods(contextClass, "sendBroadcast", hook);
+            XposedBridge.hookAllMethods(contextClass, "sendBroadcastAsUser", hook);
+            XposedBridge.hookAllMethods(contextClass, "sendOrderedBroadcast", hook);
+            XposedBridge.hookAllMethods(contextClass, "sendOrderedBroadcastAsUser", hook);
+            log(label + " assistant broadcast hooks installed");
+        } catch (Throwable throwable) {
+            log(label + " assistant broadcast hook failed: " + throwable);
+        }
+    }
+
+    private Intent firstIntentArg(Object[] args) {
+        if (args == null) {
+            return null;
+        }
+        for (Object arg : args) {
+            if (arg instanceof Intent) {
+                return (Intent) arg;
+            }
+        }
+        return null;
     }
 
     private void hookSystemUiStartAssist(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -92,41 +148,6 @@ public class HookEntry implements IXposedHookLoadPackage {
             log("SystemUI startAssist hook installed");
         } catch (Throwable throwable) {
             log("SystemUI startAssist hook failed: " + throwable);
-        }
-    }
-
-    private void hookZteAssistantReceiver(XC_LoadPackage.LoadPackageParam lpparam) {
-        Class<?> receiverClass = findClassIfExists("com.zte.aiassistant.receiver.UICommandReceiver", lpparam.classLoader);
-        if (receiverClass == null) {
-            log("UICommandReceiver not found");
-            return;
-        }
-        try {
-            findAndHookMethod(receiverClass, "onReceive", Context.class, Intent.class, new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Config.Snapshot config = Config.loadForHook();
-                    if (!config.assistantRedirectEnabled) {
-                        return;
-                    }
-                    if (!(param.args[0] instanceof Context) || !(param.args[1] instanceof Intent)) {
-                        return;
-                    }
-                    Context context = (Context) param.args[0];
-                    Intent intent = (Intent) param.args[1];
-                    String action = intent.getAction();
-                    if (!isZteAssistantWakeAction(action)) {
-                        return;
-                    }
-                    if (launchAssistantTarget(context, config.assistantTarget)) {
-                        log("redirected ZTE assistant action=" + action + " target=" + config.assistantTarget);
-                        param.setResult(null);
-                    }
-                }
-            });
-            log("ZTE assistant receiver hook installed");
-        } catch (Throwable throwable) {
-            log("ZTE assistant receiver hook failed: " + throwable);
         }
     }
 

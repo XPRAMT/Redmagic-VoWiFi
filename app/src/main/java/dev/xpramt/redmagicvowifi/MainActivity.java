@@ -30,7 +30,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -61,7 +60,6 @@ public class MainActivity extends Activity {
         setContentView(createShell());
         setSystemBarIconColors(getWindow());
         showHome();
-        makePrefsReadable();
     }
 
     @Override
@@ -223,7 +221,7 @@ public class MainActivity extends Activity {
         backView.setVisibility(View.VISIBLE);
         contentRoot.removeAllViews();
         contentRoot.addView(assistantSection());
-        contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 判定小白條長按要啟動 Assistant 時攔截，改啟動指定目標。", 13, false));
+        contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 發出小白條長按 assistant 事件前攔截，改啟動指定目標。", 13, false));
     }
 
     private LinearLayout featureButton(String title, String description, View.OnClickListener listener) {
@@ -260,7 +258,6 @@ public class MainActivity extends Activity {
 
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_VOLUME_STEP_ENABLED, isChecked).commit();
-            makePrefsReadable();
             Toast.makeText(this, "已寫入音量步進開關", Toast.LENGTH_LONG).show();
         });
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -269,7 +266,6 @@ public class MainActivity extends Activity {
                 updateLabel.run();
                 if (fromUser) {
                     prefs.edit().putInt(Config.KEY_VOLUME_STEP, volumeStepFromSeekBar(bar)).commit();
-                    makePrefsReadable();
                 }
             }
 
@@ -280,7 +276,6 @@ public class MainActivity extends Activity {
             @Override
             public void onStopTrackingTouch(SeekBar bar) {
                 prefs.edit().putInt(Config.KEY_VOLUME_STEP, volumeStepFromSeekBar(bar)).commit();
-                makePrefsReadable();
                 Toast.makeText(MainActivity.this, "已寫入音量步進值", Toast.LENGTH_SHORT).show();
             }
         });
@@ -301,11 +296,10 @@ public class MainActivity extends Activity {
         enabled.setChecked(prefs.getBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, false));
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, isChecked).commit();
-            makePrefsReadable();
             Toast.makeText(this, "已寫入魔姬手勢替換開關", Toast.LENGTH_LONG).show();
         });
         box.addView(enabled);
-        box.addView(text("攔截目標：com.android.systemui.statusbar.CommandQueue.startAssist(Bundle)\n原理：保留原廠小白條長按判斷與動畫，在 SystemUI 準備啟動 Assistant 時阻止原流程，改啟動指定目標。", 13, false));
+        box.addView(text("攔截目標：SystemUI 內 Context.sendBroadcast / sendBroadcastAsUser 發出的 event_Home_Longpressed\n原理：保留原廠小白條長按判斷，在 SystemUI 發送魔姬喚醒事件前阻止原廣播，改啟動指定目標。", 13, false));
 
         RadioGroup group = new RadioGroup(this);
         group.setOrientation(RadioGroup.VERTICAL);
@@ -315,7 +309,6 @@ public class MainActivity extends Activity {
         group.check(assistantTargetToId(prefs.getString(Config.KEY_ASSISTANT_TARGET, Config.ASSISTANT_TARGET_DEFAULT)));
         group.setOnCheckedChangeListener((radioGroup, checked) -> {
             prefs.edit().putString(Config.KEY_ASSISTANT_TARGET, idToAssistantTarget(checked)).commit();
-            makePrefsReadable();
             Toast.makeText(this, "已寫入替換目標", Toast.LENGTH_SHORT).show();
         });
         box.addView(group);
@@ -444,7 +437,7 @@ public class MainActivity extends Activity {
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
         restartSettings.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand() + "; am force-stop com.android.settings",
+                "am force-stop com.android.settings",
                 "已執行：am force-stop com.android.settings",
                 "重啟 Settings 失敗"
         ));
@@ -453,7 +446,7 @@ public class MainActivity extends Activity {
         Button restartSystemUi = new Button(this);
         restartSystemUi.setText("重啟 SystemUI");
         restartSystemUi.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand() + "; kill -9 $(pidof com.android.systemui)",
+                "kill -9 $(pidof com.android.systemui)",
                 "已執行：kill -9 $(pidof com.android.systemui)",
                 "重啟 SystemUI 失敗"
         ));
@@ -462,7 +455,7 @@ public class MainActivity extends Activity {
         Button restartBoth = new Button(this);
         restartBoth.setText("重啟 Settings + SystemUI");
         restartBoth.setOnClickListener(view -> runRootCommand(
-                prefsPermissionCommand() + "; am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)",
+                "am force-stop com.android.settings; kill -9 $(pidof com.android.systemui)",
                 "已重啟 Settings + SystemUI",
                 "重啟失敗"
         ));
@@ -562,24 +555,6 @@ public class MainActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private void makePrefsReadable() {
-        File dir = new File(getApplicationInfo().dataDir, "shared_prefs");
-        File file = new File(dir, Config.PREFS_NAME + ".xml");
-        dir.setExecutable(true, false);
-        dir.setReadable(true, false);
-        file.setReadable(true, false);
-        runRootCommandQuietly(prefsPermissionCommand());
-    }
-
-    private String prefsPermissionCommand() {
-        String pkg = getPackageName();
-        String file = Config.PREFS_NAME + ".xml";
-        return "chmod 755 /data/user/0/" + pkg + " /data/user/0/" + pkg + "/shared_prefs "
-                + "/data/data/" + pkg + " /data/data/" + pkg + "/shared_prefs 2>/dev/null; "
-                + "chmod 644 /data/user/0/" + pkg + "/shared_prefs/" + file + " "
-                + "/data/data/" + pkg + "/shared_prefs/" + file + " 2>/dev/null";
-    }
-
     private String resetpropSet(String key, String value) {
         return "if [ -x /data/adb/ksu/bin/resetprop ]; then /data/adb/ksu/bin/resetprop -n "
                 + key + " " + value + "; else resetprop -n " + key + " " + value + "; fi";
@@ -591,7 +566,6 @@ public class MainActivity extends Activity {
     }
 
     private void applyCurrentState(String successMessage, String errorMessage) {
-        makePrefsReadable();
         if (Config.MODE_ROOT_GLOBAL.equals(prefs.getString(Config.KEY_OPERATION_MODE, Config.MODE_LSPOSED))) {
             runRootCommands(globalApplyCommands(), successMessage, errorMessage);
         } else {
@@ -620,16 +594,6 @@ public class MainActivity extends Activity {
             commands.add(resetpropDelete("persist.custom.variant.id"));
         }
         return commands;
-    }
-
-    private void runRootCommandQuietly(String command) {
-        try {
-            Process process = new ProcessBuilder("su", "-c", command).redirectErrorStream(true).start();
-            process.waitFor();
-        } catch (IOException ignored) {
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     private void runRootCommand(String command, String successMessage, String errorMessage) {
