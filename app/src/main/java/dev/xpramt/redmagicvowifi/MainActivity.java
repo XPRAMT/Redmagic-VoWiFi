@@ -423,12 +423,20 @@ public class MainActivity extends Activity {
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView titleView = text(selected ? title + "  已選擇" : title, 15, true);
+        TextView titleView = text(title, 15, true);
         labels.addView(titleView);
         TextView descriptionView = text(description, 12, false);
         descriptionView.setTextColor(Color.rgb(190, 196, 205));
         labels.addView(descriptionView);
         card.addView(labels);
+
+        TextView selectedMarker = text(selected ? "●" : "", 18, true);
+        selectedMarker.setTextColor(Color.WHITE);
+        selectedMarker.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(dp(28), dp(44));
+        markerParams.setMargins(dp(8), 0, 0, 0);
+        selectedMarker.setLayoutParams(markerParams);
+        card.addView(selectedMarker);
 
         return card;
     }
