@@ -63,7 +63,7 @@ public class HookEntry implements IXposedHookLoadPackage {
         if (SYSTEM_UI.equals(lpparam.packageName)) {
             hookSystemUiStartAssist(lpparam);
             hookSystemUiAssistantBroadcast(lpparam);
-            hookRecentUiFilter(lpparam);
+            log("Recent UI hooks disabled to avoid Recents restart loop");
             if (config.enableStatusIcon) {
                 hookSystemUiAbroad(lpparam);
             }
@@ -74,7 +74,7 @@ public class HookEntry implements IXposedHookLoadPackage {
             }
         }
         if (STOCK_LAUNCHER.equals(lpparam.packageName)) {
-            hookRecentUiFilter(lpparam);
+            log("Launcher_MFV hooks disabled to avoid Recents restart loop");
         }
     }
 
