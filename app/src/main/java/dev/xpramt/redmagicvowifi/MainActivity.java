@@ -313,13 +313,19 @@ public class MainActivity extends Activity {
         contentRoot.removeAllViews();
 
         contentRoot.addView(detailText("此功能修正 VoWiFi UI 顯示。"));
-        contentRoot.addView(sectionSwitch(
+        LinearLayout wfcSettingsSection = sectionSwitch(
                 "在設定顯示 VoWiFi 設定",
                 "在設定顯示 Wi-Fi Calling / VoWiFi 開關。仍需要 Pixel IMS 啟用 WFC。",
                 "com.android.settings",
                 "ro.vendor.feature.zte_feature_need_wfc_for_domestic=true",
                 Config.KEY_ENABLE_WFC_SETTINGS
-        ));
+        );
+        Button openWfcSettings = new Button(this);
+        openWfcSettings.setText("打開 WiFi 通話設定");
+        styleButton(openWfcSettings, false, false);
+        openWfcSettings.setOnClickListener(view -> openWifiCallingSettings());
+        wfcSettingsSection.addView(openWfcSettings);
+        contentRoot.addView(wfcSettingsSection);
         contentRoot.addView(sectionSwitch(
                 "開啟狀態列 VoWiFi 圖標",
                 "更改狀態列圖標來源，解決 VoWiFi 圖標無法顯示的問題。開啟後 4G 通話圖標由 HD 變為 VoLTE。修改只作用於 IMS / 訊號圖標相關呼叫，避免其它功能受到影響。",
@@ -329,6 +335,19 @@ public class MainActivity extends Activity {
         ));
         contentRoot.addView(styleSection());
         contentRoot.addView(actionSection());
+    }
+
+    private void openWifiCallingSettings() {
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setComponent(new ComponentName(
+                "com.android.settings",
+                "com.android.settings.Settings$WifiCallingSettingsActivity"
+        ));
+        try {
+            startActivity(intent);
+        } catch (SecurityException | android.content.ActivityNotFoundException exception) {
+            showToast("無法打開 WiFi 通話設定");
+        }
     }
 
     private void showVolumePage() {
