@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.text.Layout;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
@@ -245,15 +246,19 @@ public class MainActivity extends Activity {
         backView.setVisibility(View.VISIBLE);
         contentRoot.removeAllViews();
 
-        contentRoot.addView(text("此功能只使用 LSPosed hook，不全域修改系統屬性。Root 後建議直接使用 LSPosed，作用範圍更可控。", 14, false));
+        contentRoot.addView(detailText("此功能修正 VoWiFi UI 顯示。"));
         contentRoot.addView(sectionSwitch(
-                "開啟 VoWiFi 設定",
-                "作用進程：com.android.settings\n等效參數：ro.vendor.feature.zte_feature_need_wfc_for_domestic=true\n用途：讓 Settings 的 ZTE 國內 WFC gate 通過，顯示 Wi-Fi Calling/VoWiFi 開關。仍需要 Pixel IMS 或 carrier config 啟用 WFC。",
+                "在設定顯示 VoWiFi 設定",
+                "在設定顯示 Wi-Fi Calling / VoWiFi 開關。仍需要 Pixel IMS 啟用 WFC。",
+                "com.android.settings",
+                "ro.vendor.feature.zte_feature_need_wfc_for_domestic=true",
                 Config.KEY_ENABLE_WFC_SETTINGS
         ));
         contentRoot.addView(sectionSwitch(
                 "開啟狀態列 VoWiFi 圖標",
-                "作用進程：com.android.systemui\n只讓 IMS/訊號圖標相關呼叫讀到 ro.vendor.mifavor.custom=abroad / ro.mifavor.custom=abroad；小白條、assistant、navigation 相關呼叫會固定讀到 home，避免手勢被 abroad 分支影響。",
+                "更改狀態列圖標來源，解決 VoWiFi 圖標無法顯示的問題。開啟後 4G 通話圖標由 HD 變為 VoLTE。修改只作用於 IMS / 訊號圖標相關呼叫，避免其它功能受到影響。",
+                "com.android.systemui",
+                "ro.vendor.mifavor.custom=abroad\nro.mifavor.custom=abroad",
                 Config.KEY_ENABLE_STATUS_ICON
         ));
         contentRoot.addView(styleSection());
@@ -266,7 +271,6 @@ public class MainActivity extends Activity {
         backView.setVisibility(View.VISIBLE);
         contentRoot.removeAllViews();
         contentRoot.addView(volumeSection());
-        contentRoot.addView(text("生效條件：LSPosed 需勾選 android scope，並重啟手機讓 system_server 載入模組。設定值會即時寫入，已載入 hook 後通常不需要重新安裝 APK。", 13, false));
     }
 
     private void showAssistantPage() {
@@ -275,7 +279,6 @@ public class MainActivity extends Activity {
         backView.setVisibility(View.VISIBLE);
         contentRoot.removeAllViews();
         contentRoot.addView(assistantSection());
-        contentRoot.addView(text("生效條件：LSPosed 需勾選 com.android.systemui scope，並重啟 SystemUI 或手機。此功能不修改系統預設 assistant 設定，也不需要魔姬存在；它在 SystemUI 發出小白條長按 assistant 事件前攔截，改啟動指定目標。選擇目標後會立即保存。", 13, false));
     }
 
     private void showLauncherPage() {
@@ -305,7 +308,7 @@ public class MainActivity extends Activity {
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         labels.addView(text(title, 17, true));
-        TextView detail = text(description, 13, false);
+        TextView detail = detailText(description);
         detail.setTextColor(Color.rgb(190, 196, 205));
         labels.addView(detail);
         card.addView(labels);
@@ -318,10 +321,12 @@ public class MainActivity extends Activity {
         enabled.setText("啟用自訂音量步進");
         enabled.setTextSize(18);
         enabled.setTextColor(Color.WHITE);
+        enabled.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         enabled.setChecked(prefs.getBoolean(Config.KEY_VOLUME_STEP_ENABLED, false));
         box.addView(enabled);
 
         TextView stepLabel = text("", 16, true);
+        stepLabel.setGravity(Gravity.CENTER_HORIZONTAL);
         box.addView(stepLabel);
 
         SeekBar seekBar = new SeekBar(this);
@@ -329,7 +334,7 @@ public class MainActivity extends Activity {
         seekBar.setProgress(Config.clampVolumeStep(prefs.getInt(Config.KEY_VOLUME_STEP, Config.DEFAULT_VOLUME_STEP)) - Config.MIN_VOLUME_STEP);
         box.addView(seekBar);
 
-        Runnable updateLabel = () -> stepLabel.setText("目前設定：" + volumeStepFromSeekBar(seekBar) + " / 10");
+        Runnable updateLabel = () -> stepLabel.setText(volumeStepFromSeekBar(seekBar) + " / 10");
         updateLabel.run();
 
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
@@ -355,7 +360,9 @@ public class MainActivity extends Activity {
                 showToast("已寫入音量步進值");
             }
         });
-        box.addView(text("Hook 目標：android / com.android.server.audio.AudioService\n處理：adjustStreamVolume、adjustSuggestedStreamVolume\n範圍：只攔截媒體音量的音量鍵升降，步進值 1 到 10。", 13, false));
+        box.addView(detailText("攔截媒體音量的音量鍵升降步進值，可設為 1 到 10。第一次載入可能需要重啟手機才能生效。"));
+        addDetailField(box, "作用進程", "android / System Framework");
+        addDetailField(box, "攔截方法", "adjustStreamVolume\nadjustSuggestedStreamVolume");
         return box;
     }
 
@@ -369,15 +376,17 @@ public class MainActivity extends Activity {
         enabled.setText("啟用魔姬手勢替換");
         enabled.setTextSize(18);
         enabled.setTextColor(Color.WHITE);
+        enabled.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         enabled.setChecked(prefs.getBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, false));
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_ASSISTANT_REDIRECT_ENABLED, isChecked).commit();
             showToast("已寫入魔姬手勢替換開關");
         });
         box.addView(enabled);
-        box.addView(text("攔截目標：SystemUI 內 Context.sendBroadcast / sendBroadcastAsUser 發出的 event_Home_Longpressed\n原理：保留原廠小白條長按判斷，在 SystemUI 發送魔姬喚醒事件前阻止原廣播，改啟動指定目標。", 13, false));
-
-        box.addView(text("目前目標：" + assistantTargetLabel(prefs.getString(Config.KEY_ASSISTANT_TARGET, Config.ASSISTANT_TARGET_DEFAULT)), 14, true));
+        box.addView(detailText("攔截小白條長按喚出魔姬助手的事件，改為啟動指定目標。可能需要重啟 SystemUI 才能生效。"));
+        addDetailField(box, "作用進程", "com.android.systemui");
+        addDetailField(box, "攔截方法", "Context.sendBroadcast / sendBroadcastAsUser 發出的 event_Home_Longpressed");
+        addDetailField(box, "目前目標", assistantTargetLabel(prefs.getString(Config.KEY_ASSISTANT_TARGET, Config.ASSISTANT_TARGET_DEFAULT)));
         box.addView(assistantTabs());
         if (assistantTab == 0) {
             addSystemActions(box);
@@ -393,16 +402,20 @@ public class MainActivity extends Activity {
         enabled.setText("從最近使用列表隱藏選定啟動器");
         enabled.setTextSize(18);
         enabled.setTextColor(Color.WHITE);
+        enabled.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         enabled.setChecked(prefs.getBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, false));
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(Config.KEY_LAUNCHER_OVERRIDE_ENABLED, isChecked).commit();
             showToast("已寫入最近任務隱藏開關");
         });
         box.addView(enabled);
-        box.addView(text("需要 LSPosed 勾選 com.zte.mifavor.launcher scope。Hook 紅魔 Launcher 的 RecentsView#onGestureAnimationStart，只在手勢模式 current task 是選定第三方 HOME 時阻止它被補成最近任務卡片。", 13, false));
+        box.addView(detailText("避免使用第三方啟動器時，啟動器被補成最近任務卡片。只在手勢模式、目前任務為選定第三方 HOME 時生效。"));
+        addDetailField(box, "作用進程", "com.zte.mifavor.launcher");
+        addDetailField(box, "攔截方法", "RecentsView#onGestureAnimationStart");
         box.addView(verticalSpace(14));
-        box.addView(text("更換啟動器", 16, true));
-        box.addView(text("優先使用 root 執行系統 set-home-activity；無 root 時可透過 Shizuku 授權使用 shell 權限套用。", 13, false));
+        box.addView(text("更換啟動器", 18, true));
+        box.addView(detailText("優先使用 root 執行系統 set-home-activity；無 root 時可透過 Shizuku 授權，以 shell 權限套用。"));
+        addDetailField(box, "指令", "cmd package set-home-activity --user 0 <component>");
 
         String component = prefs.getString(Config.KEY_LAUNCHER_COMPONENT, "");
         if (isSettingsFallbackHome(component)) {
@@ -415,7 +428,7 @@ public class MainActivity extends Activity {
 
         List<ResolveInfo> launchers = installedLaunchers();
         if (launchers.isEmpty()) {
-            box.addView(text("未找到可處理 HOME intent 的啟動器。", 13, false));
+            box.addView(detailText("未找到可處理 HOME intent 的啟動器。"));
         }
         for (ResolveInfo info : launchers) {
             String packageName = info.activityInfo.packageName;
@@ -516,7 +529,8 @@ public class MainActivity extends Activity {
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         labels.addView(text(title, 15, true));
-        TextView descriptionView = text(description, 12, false);
+        TextView descriptionView = detailText(description);
+        descriptionView.setTextSize(12);
         descriptionView.setTextColor(Color.rgb(190, 196, 205));
         labels.addView(descriptionView);
         card.addView(labels);
@@ -661,7 +675,8 @@ public class MainActivity extends Activity {
 
         TextView titleView = text(title, 15, true);
         labels.addView(titleView);
-        TextView descriptionView = text(description, 12, false);
+        TextView descriptionView = detailText(description);
+        descriptionView.setTextSize(12);
         descriptionView.setTextColor(Color.rgb(190, 196, 205));
         labels.addView(descriptionView);
         card.addView(labels);
@@ -755,26 +770,31 @@ public class MainActivity extends Activity {
         }
     }
 
-    private LinearLayout sectionSwitch(String title, String description, String key) {
+    private LinearLayout sectionSwitch(String title, String description, String process, String parameter, String key) {
         LinearLayout box = sectionBox();
         Switch sw = new Switch(this);
         sw.setText(title);
         sw.setTextSize(18);
         sw.setTextColor(Color.WHITE);
+        sw.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         sw.setChecked(prefs.getBoolean(key, true));
         sw.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
             prefs.edit().putBoolean(key, isChecked).commit();
             showToast("已保存 LSPosed 設定：" + title);
         });
         box.addView(sw);
-        box.addView(text(description, 13, false));
+        box.addView(detailText(description));
+        addDetailField(box, "作用進程", process);
+        addDetailField(box, "參數", parameter);
         return box;
     }
 
     private LinearLayout styleSection() {
         LinearLayout box = sectionBox();
         box.addView(text("VoWiFi 圖標樣式", 18, true));
-        box.addView(text("作用進程：com.android.systemui\n等效參數：persist.custom.variant.id=GEN_BD\n用途：控制 SystemUI 選用哪一套 VoWiFi/VoLTE icon array。圖標樣式切換後重啟 SystemUI 即可生效。", 13, false));
+        box.addView(detailText("控制 SystemUI 選用哪一套 VoWiFi / VoLTE 圖標。GEN_BD 模式會讀取下列參數；Hook array 模式則直接替換 IMS icon array。"));
+        addDetailField(box, "作用進程", "com.android.systemui");
+        addDetailField(box, "參數", "persist.custom.variant.id=GEN_BD");
 
         RadioGroup group = new RadioGroup(this);
         group.setOrientation(RadioGroup.VERTICAL);
@@ -798,7 +818,7 @@ public class MainActivity extends Activity {
     private LinearLayout actionSection() {
         LinearLayout box = sectionBox();
         box.addView(text("重啟", 18, true));
-        box.addView(text("開關變更會自動保存到 LSPosed 設定。重啟按鈕只負責讓 Settings/SystemUI 重新讀取目前設定，會使用 su。", 13, false));
+        box.addView(detailText("開關變更會自動保存到 LSPosed 設定。重啟 Settings / SystemUI 後才會重新讀取設定；重啟操作需要 root 權限。"));
 
         Button restartSettings = new Button(this);
         restartSettings.setText("重啟 Settings");
@@ -897,6 +917,20 @@ public class MainActivity extends Activity {
             textView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         }
         return textView;
+    }
+
+    private TextView detailText(String value) {
+        TextView textView = text(value, 13, false);
+        textView.setGravity(Gravity.START);
+        textView.setJustificationMode(Layout.JUSTIFICATION_MODE_INTER_WORD);
+        return textView;
+    }
+
+    private void addDetailField(LinearLayout box, String label, String value) {
+        TextView labelView = text(label, 14, true);
+        labelView.setPadding(0, dp(10), 0, 0);
+        box.addView(labelView);
+        box.addView(detailText(value));
     }
 
     private View verticalSpace(int dp) {
