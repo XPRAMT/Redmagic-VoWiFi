@@ -10,6 +10,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -790,11 +791,12 @@ public class MainActivity extends Activity {
         });
         content.addView(checkNow);
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("設定")
                 .setView(content)
                 .setPositiveButton("關閉", null)
-                .show();
+                .create();
+        showThemedDialog(dialog);
     }
 
     private void checkForUpdates(boolean userInitiated) {
@@ -889,15 +891,16 @@ public class MainActivity extends Activity {
     }
 
     private void showUpdateDialog(ReleaseInfo release) {
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("發現新版本")
                 .setMessage("RedMagicX " + release.tagName + " 已發布，目前版本為 " + versionName())
                 .setNegativeButton("稍後", null)
-                .setPositiveButton("前往下載", (dialog, which) -> {
+                .setPositiveButton("前往下載", (ignoredDialog, which) -> {
                     Intent browser = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.htmlUrl));
                     startActivity(browser);
                 })
-                .show();
+                .create();
+        showThemedDialog(dialog);
     }
 
     private static final class ReleaseInfo {
@@ -920,14 +923,50 @@ public class MainActivity extends Activity {
         }
         TextView content = text("", 14, false);
         content.setText(spannable);
+        content.setLinkTextColor(Color.rgb(156, 199, 255));
         content.setMovementMethod(LinkMovementMethod.getInstance());
         content.setPadding(dp(24), dp(8), dp(24), 0);
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("關於")
                 .setView(content)
                 .setPositiveButton("確定", null)
-                .show();
+                .create();
+        showThemedDialog(dialog);
+    }
+
+    private void showThemedDialog(AlertDialog dialog) {
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+        }
+
+        TextView title = dialog.findViewById(android.R.id.title);
+        if (title != null) {
+            title.setTextColor(Color.WHITE);
+        }
+        TextView message = dialog.findViewById(android.R.id.message);
+        if (message != null) {
+            message.setTextColor(Color.WHITE);
+        }
+        styleDialogButton(dialog.getButton(AlertDialog.BUTTON_POSITIVE), true);
+        styleDialogButton(dialog.getButton(AlertDialog.BUTTON_NEGATIVE), false);
+        styleDialogButton(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), false);
+    }
+
+    private void styleDialogButton(Button button, boolean selected) {
+        if (button == null) {
+            return;
+        }
+        button.setAllCaps(false);
+        button.setTextSize(14);
+        button.setTextColor(Color.WHITE);
+        button.setGravity(Gravity.CENTER);
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setPadding(dp(16), 0, dp(16), 0);
+        button.setBackground(cardBackground(selected ? CARD_SELECTED_COLOR : CARD_COLOR));
     }
 
     private String versionName() {
