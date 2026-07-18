@@ -482,13 +482,13 @@ public class MainActivity extends Activity {
         StringBuilder command = new StringBuilder(
                 "am start -n com.android.contacts/.activities.DialtactsActivity -a android.intent.action.DIAL"
         );
-        command.append("; sleep 1; input tap ")
+        command.append("; sleep 0.5; input tap ")
                 .append(onePoint[0]).append(' ').append(onePoint[1])
-                .append("; sleep 0.2; input swipe ")
+                .append("; sleep 0.1; input swipe ")
                 .append(deleteX).append(' ').append(deleteY).append(' ')
-                .append(deleteX).append(' ').append(deleteY).append(" 900")
-                .append("; sleep 1; am start -n com.android.contacts/.activities.DialtactsActivity")
-                .append(" -a android.intent.action.DIAL; sleep 1");
+                .append(deleteX).append(' ').append(deleteY).append(" 600")
+                .append("; sleep 0.3; am start -n com.android.contacts/.activities.DialtactsActivity")
+                .append(" -a android.intent.action.DIAL; sleep 0.5");
         for (int index = 0; index < dialCode.length(); index++) {
             int[] point = dialPadPoint(dialCode.charAt(index), width, height);
             command.append("; input tap ").append(point[0]).append(' ').append(point[1]);
