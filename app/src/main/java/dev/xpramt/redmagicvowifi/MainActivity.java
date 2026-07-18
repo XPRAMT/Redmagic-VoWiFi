@@ -406,12 +406,23 @@ public class MainActivity extends Activity {
         Button phoneInfo = new Button(this);
         phoneInfo.setText("開啟手機資訊");
         styleButton(phoneInfo, false, false);
-        phoneInfo.setOnClickListener(view -> openQuickEntryCommand(
-                "am start -n com.android.phone/.settings.RadioInfo",
-                "已開啟手機資訊"
-        ));
+        phoneInfo.setOnClickListener(view -> openPhoneInfo());
         box.addView(phoneInfo);
         return box;
+    }
+
+    private void openPhoneInfo() {
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setComponent(new ComponentName("com.android.phone", "com.android.phone.settings.RadioInfo"));
+        try {
+            startActivity(intent);
+            showToast("已開啟手機資訊");
+        } catch (SecurityException | android.content.ActivityNotFoundException exception) {
+            openQuickEntryCommand(
+                    "am start -n com.android.phone/.settings.RadioInfo",
+                    "已開啟手機資訊"
+            );
+        }
     }
 
     private void openEngineeringMode(String dialCode, String successMessage) {
