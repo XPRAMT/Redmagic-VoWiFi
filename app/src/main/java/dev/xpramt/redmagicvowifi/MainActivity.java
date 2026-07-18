@@ -504,12 +504,27 @@ public class MainActivity extends Activity {
         developerAdb.setEnabled(false);
         box.addView(developerAdb);
         TextView developerAdbStatus = wirelessAdbField(box, "系統狀態", "讀取中...");
+
+        Switch fakeAdb = new Switch(this);
+        fakeAdb.setText("偽裝 ADB 狀態");
+        fakeAdb.setTextSize(18);
+        fakeAdb.setTextColor(Color.WHITE);
+        fakeAdb.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        fakeAdb.setEnabled(false);
+        box.addView(fakeAdb);
+        box.addView(detailText("寫入 adb_enabled=2。系統會把非零值視為 ADB 已開啟，因此 ADB 連線可維持；只有精確檢查 adb_enabled 是否等於 1 的部分 App 會判定 ADB 未開啟。檢查非零值、USB 設定或其它偵錯狀態的 App 不受影響。"));
+
         developerAdb.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (!updatingDeveloperAdbSwitch) {
-                toggleDeveloperAdb(isChecked, developerAdb, developerAdbStatus);
+                toggleDeveloperAdb(isChecked, developerAdb, fakeAdb, developerAdbStatus);
             }
         });
-        refreshDeveloperAdbStatus(developerAdb, developerAdbStatus);
+        fakeAdb.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (!updatingDeveloperAdbSwitch) {
+                toggleFakeAdb(isChecked, developerAdb, fakeAdb, developerAdbStatus);
+            }
+        });
+        refreshDeveloperAdbStatus(developerAdb, fakeAdb, developerAdbStatus);
 
         box.addView(verticalSpace(14));
         box.addView(text("無線 ADB", 18, true));
@@ -603,49 +618,82 @@ public class MainActivity extends Activity {
         return (TextView) box.getChildAt(box.getChildCount() - 1);
     }
 
-    private void refreshDeveloperAdbStatus(Switch toggle, TextView statusValue) {
+    private void refreshDeveloperAdbStatus(Switch toggle, Switch fakeToggle, TextView statusValue) {
         toggle.setEnabled(false);
+        fakeToggle.setEnabled(false);
         statusValue.setText("讀取中...");
         rootExecutor.execute(() -> {
             String adbSetting = readRootCommandOutput("settings get global adb_enabled");
-            boolean enabled = "1".equals(adbSetting);
             mainHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
-                updateDeveloperAdbViews(enabled, toggle, statusValue, adbSetting != null);
+                updateDeveloperAdbViews(adbSetting, toggle, fakeToggle, statusValue);
             });
         });
     }
 
-    private void toggleDeveloperAdb(boolean enabled, Switch toggle, TextView statusValue) {
+    private void toggleDeveloperAdb(boolean enabled, Switch toggle, Switch fakeToggle, TextView statusValue) {
         toggle.setEnabled(false);
+        fakeToggle.setEnabled(false);
         statusValue.setText("套用中...");
         rootExecutor.execute(() -> {
             int exitCode = runProcess(new ProcessBuilder("su", "-c", "settings put global adb_enabled " + (enabled ? "1" : "0")));
             String adbSetting = readRootCommandOutput("settings get global adb_enabled");
-            boolean actualEnabled = "1".equals(adbSetting);
             mainHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
-                boolean available = adbSetting != null;
-                updateDeveloperAdbViews(actualEnabled, toggle, statusValue, available);
-                showToast(exitCode == 0 && available && actualEnabled == enabled
+                updateDeveloperAdbViews(adbSetting, toggle, fakeToggle, statusValue);
+                showToast(exitCode == 0 && String.valueOf(enabled ? 1 : 0).equals(adbSetting)
                         ? (enabled ? "ADB 已開啟" : "ADB 已關閉")
                         : "ADB 未套用，請確認 root 權限");
             });
         });
     }
 
-    private void updateDeveloperAdbViews(boolean enabled, Switch toggle, TextView statusValue, boolean available) {
+    private void toggleFakeAdb(boolean enabled, Switch toggle, Switch fakeToggle, TextView statusValue) {
+        toggle.setEnabled(false);
+        fakeToggle.setEnabled(false);
+        statusValue.setText("套用中...");
+        rootExecutor.execute(() -> {
+            int exitCode = runProcess(new ProcessBuilder("su", "-c", "settings put global adb_enabled " + (enabled ? "2" : "1")));
+            String adbSetting = readRootCommandOutput("settings get global adb_enabled");
+            mainHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                updateDeveloperAdbViews(adbSetting, toggle, fakeToggle, statusValue);
+                showToast(exitCode == 0 && String.valueOf(enabled ? 2 : 1).equals(adbSetting)
+                        ? (enabled ? "ADB 偽裝模式已開啟" : "ADB 偽裝模式已關閉")
+                        : "ADB 偽裝模式未套用，請確認 root 權限");
+            });
+        });
+    }
+
+    private void updateDeveloperAdbViews(String adbSetting, Switch toggle, Switch fakeToggle, TextView statusValue) {
+        boolean available = adbSetting != null;
+        boolean enabled = isAdbEnabled(adbSetting);
+        boolean fakeEnabled = "2".equals(adbSetting);
         updatingDeveloperAdbSwitch = true;
         toggle.setChecked(enabled);
+        fakeToggle.setChecked(fakeEnabled);
         updatingDeveloperAdbSwitch = false;
         toggle.setEnabled(available);
+        fakeToggle.setEnabled(available && enabled);
         statusValue.setText(available
-                ? (enabled ? "已開啟（adb_enabled=1）" : "已關閉（adb_enabled=0）")
+                ? (enabled
+                    ? (fakeEnabled ? "已開啟（adb_enabled=2，偽裝模式）" : "已開啟（adb_enabled=" + adbSetting + "）")
+                    : "已關閉（adb_enabled=" + adbSetting + "）")
                 : "無法取得 root 狀態");
+    }
+
+    private boolean isAdbEnabled(String adbSetting) {
+        try {
+            return Integer.parseInt(adbSetting) > 0;
+        } catch (NumberFormatException | NullPointerException exception) {
+            return false;
+        }
     }
 
     private String readRootCommandOutput(String command) {
