@@ -19,6 +19,7 @@ final class Config {
     static final String KEY_LAUNCHER_OVERRIDE_ENABLED = "launcher_override_enabled";
     static final String KEY_LAUNCHER_COMPONENT = "launcher_component";
     static final String KEY_LAUNCHER_PACKAGE = "launcher_package";
+    static final String KEY_AUTO_CHECK_UPDATES = "auto_check_updates";
 
     static final String STYLE_DEFAULT = "default";
     static final String STYLE_GEN_BD = "gen_bd";

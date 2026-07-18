@@ -13,6 +13,8 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Layout;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -38,11 +40,18 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import rikka.shizuku.Shizuku;
 
@@ -60,6 +69,9 @@ public class MainActivity extends Activity {
     private static final String STOCK_LAUNCHER_PACKAGE = "com.zte.mifavor.launcher";
     private static final String STOCK_LAUNCHER_CLASS = "com.android.launcher3.uioverrides.QuickstepLauncher";
     private static final int SHIZUKU_REQUEST_CODE_HOME = 1001;
+    private static final String RELEASES_LATEST_URL = "https://api.github.com/repos/XPRAMT/RedMagicX/releases/latest";
+    private static final String RELEASES_PAGE_URL = "https://github.com/XPRAMT/RedMagicX/releases";
+    private static final Pattern JSON_STRING_FIELD = Pattern.compile("\\\"(tag_name|html_url)\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     private SharedPreferences prefs;
     private LinearLayout screen;
@@ -71,6 +83,8 @@ public class MainActivity extends Activity {
     private String pendingHomeCommand;
     private String pendingHomeSuccessMessage;
     private String pendingHomeErrorMessage;
+    private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Shizuku.OnRequestPermissionResultListener shizukuPermissionListener =
             (requestCode, grantResult) -> {
                 if (requestCode != SHIZUKU_REQUEST_CODE_HOME) {
@@ -97,11 +111,15 @@ public class MainActivity extends Activity {
         setContentView(createShell());
         setSystemBarIconColors(getWindow());
         showHome();
+        if (prefs.getBoolean(Config.KEY_AUTO_CHECK_UPDATES, true)) {
+            checkForUpdates(false);
+        }
     }
 
     @Override
     protected void onDestroy() {
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener);
+        updateExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -734,11 +752,163 @@ public class MainActivity extends Activity {
     private void showOverflowMenu(TextView anchor) {
         PopupMenu popup = new PopupMenu(this, anchor);
         popup.getMenu().add("關於");
+        popup.getMenu().add("設定");
         popup.setOnMenuItemClickListener(item -> {
-            showAboutDialog();
+            if ("關於".contentEquals(item.getTitle())) {
+                showAboutDialog();
+            } else if ("設定".contentEquals(item.getTitle())) {
+                showSettingsDialog();
+            }
             return true;
         });
         popup.show();
+    }
+
+    private void showSettingsDialog() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(8), dp(24), 0);
+
+        Switch autoCheck = new Switch(this);
+        autoCheck.setText("自動檢測更新");
+        autoCheck.setTextSize(16);
+        autoCheck.setTextColor(Color.WHITE);
+        autoCheck.setChecked(prefs.getBoolean(Config.KEY_AUTO_CHECK_UPDATES, true));
+        autoCheck.setOnCheckedChangeListener((buttonView, checked) ->
+                prefs.edit().putBoolean(Config.KEY_AUTO_CHECK_UPDATES, checked).apply());
+        content.addView(autoCheck);
+
+        TextView description = detailText("開啟後，啟動 App 時會檢查 GitHub 最新正式 Release。偵測到新版本時會顯示通知。");
+        description.setPadding(0, 0, 0, dp(12));
+        content.addView(description);
+
+        Button checkNow = new Button(this);
+        checkNow.setText("手動檢查更新");
+        styleButton(checkNow, false, false);
+        checkNow.setOnClickListener(view -> {
+            checkNow.setEnabled(false);
+            checkForUpdates(true, () -> checkNow.setEnabled(true));
+        });
+        content.addView(checkNow);
+
+        new AlertDialog.Builder(this)
+                .setTitle("設定")
+                .setView(content)
+                .setPositiveButton("關閉", null)
+                .show();
+    }
+
+    private void checkForUpdates(boolean userInitiated) {
+        checkForUpdates(userInitiated, null);
+    }
+
+    private void checkForUpdates(boolean userInitiated, Runnable completed) {
+        updateExecutor.execute(() -> {
+            ReleaseInfo release = null;
+            String error = null;
+            try {
+                release = fetchLatestRelease();
+            } catch (IOException exception) {
+                error = "無法連線 GitHub";
+            }
+
+            ReleaseInfo result = release;
+            String failure = error;
+            mainHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                if (completed != null) {
+                    completed.run();
+                }
+                if (failure != null) {
+                    if (userInitiated) showToast(failure);
+                    return;
+                }
+                if (isNewerVersion(result.tagName, versionName())) {
+                    showUpdateDialog(result);
+                } else if (userInitiated) {
+                    showToast("已是最新版本 " + versionName());
+                }
+            });
+        });
+    }
+
+    private ReleaseInfo fetchLatestRelease() throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) new URL(RELEASES_LATEST_URL).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(8000);
+        connection.setReadTimeout(8000);
+        connection.setRequestProperty("Accept", "application/vnd.github+json");
+        connection.setRequestProperty("User-Agent", "RedMagicX-Android");
+        try {
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                throw new IOException("GitHub response error");
+            }
+            String body = readFully(connection.getInputStream());
+            Matcher matcher = JSON_STRING_FIELD.matcher(body);
+            String tagName = null;
+            String htmlUrl = null;
+            while (matcher.find()) {
+                if ("tag_name".equals(matcher.group(1))) tagName = matcher.group(2);
+                if ("html_url".equals(matcher.group(1))) htmlUrl = matcher.group(2);
+            }
+            if (tagName == null || htmlUrl == null) throw new IOException("Malformed GitHub response");
+            return new ReleaseInfo(tagName, htmlUrl);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private String readFully(InputStream input) throws IOException {
+        StringBuilder output = new StringBuilder();
+        byte[] buffer = new byte[4096];
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            output.append(new String(buffer, 0, read, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        input.close();
+        return output.toString();
+    }
+
+    private boolean isNewerVersion(String latestTag, String installedVersion) {
+        String[] latest = latestTag.replaceFirst("^[vV]", "").split("\\.");
+        String[] installed = installedVersion.replaceFirst("^[vV]", "").split("\\.");
+        int length = Math.max(latest.length, installed.length);
+        for (int i = 0; i < length; i++) {
+            int left = versionPart(latest, i);
+            int right = versionPart(installed, i);
+            if (left != right) return left > right;
+        }
+        return false;
+    }
+
+    private int versionPart(String[] parts, int index) {
+        if (index >= parts.length) return 0;
+        Matcher matcher = Pattern.compile("\\d+").matcher(parts[index]);
+        return matcher.find() ? Integer.parseInt(matcher.group()) : 0;
+    }
+
+    private void showUpdateDialog(ReleaseInfo release) {
+        new AlertDialog.Builder(this)
+                .setTitle("發現新版本")
+                .setMessage("RedMagicX " + release.tagName + " 已發布，目前版本為 " + versionName())
+                .setNegativeButton("稍後", null)
+                .setPositiveButton("前往下載", (dialog, which) -> {
+                    Intent browser = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.htmlUrl));
+                    startActivity(browser);
+                })
+                .show();
+    }
+
+    private static final class ReleaseInfo {
+        final String tagName;
+        final String htmlUrl;
+
+        ReleaseInfo(String tagName, String htmlUrl) {
+            this.tagName = tagName;
+            this.htmlUrl = htmlUrl;
+        }
     }
 
     private void showAboutDialog() {
